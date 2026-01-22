@@ -23,12 +23,12 @@ julia1.11 --project=. run_me.jl
 &\quad \ s_t = \Delta T \alpha p_t - \Delta T \beta g_t + \gamma s_{t-1}
 &\forall t \in \mathcal{T}
 \\
-&\quad \ \underbar{s} \leq s_0 \leq \overline{s}
+&\quad \ \underline{s} \leq s_0 \leq \overline{s}
 \\
 &\quad \ \gamma s_{t-1} + \Delta T \alpha p_t \leq \overline{s}
 &\forall t \in \mathcal{T}
 \\
-&\quad \ \gamma s_{t-1} - \Delta T \beta g_t \geq \underbar{s}
+&\quad \ \gamma s_{t-1} - \Delta T \beta g_t \geq \underline{s}
 &\forall t \in \mathcal{T}
 \end{aligned}
 ```
