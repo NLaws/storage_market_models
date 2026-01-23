@@ -7,11 +7,11 @@ using PrettyTables
 export
     Inputs,
     inputs_base,
-    build_model,
+    build_time_coupled_model,
     print_results
 
 include("./inputs.jl")
-include("./model.jl")
+include("./models.jl")
 include("./results.jl")
 
 end

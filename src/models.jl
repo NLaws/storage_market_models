@@ -1,5 +1,5 @@
 
-function build_model(inputs::Inputs)::JuMP.AbstractModel
+function build_time_coupled_model(inputs::Inputs)::JuMP.AbstractModel
 
     m = JuMP.Model(HiGHS.Optimizer)
 
@@ -33,14 +33,14 @@ function build_model(inputs::Inputs)::JuMP.AbstractModel
         x[t] + g[t] + r[t] - p[t] == inputs.demand[t]
     )
 
-    s_double_bar = inputs.gamma^T * inputs.soc_init
+    m[:s_double_bar] = inputs.gamma^T * inputs.soc_init
     
     @objective(m, Min, 
         inputs.thermal_offer_price * sum([x[t] for t = 1:T])
         + inputs.renewable_offer_price * sum([r[t] for t = 1:T])
         + inputs.epsilon * sum([p[t] for t = 1:T])
         + inputs.zeta * sum([g[t] for t = 1:T])
-        - inputs.b * (s[T] - s_double_bar)
+        - inputs.b * (s[T] - m[:s_double_bar])
     )
 
     return m

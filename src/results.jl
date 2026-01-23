@@ -1,5 +1,5 @@
 
-function print_results(m::JuMP.AbstractModel)
+function print_results(inputs::Inputs, m::JuMP.AbstractModel)
 
     T = length(inputs_base.demand)
     
@@ -17,5 +17,11 @@ function print_results(m::JuMP.AbstractModel)
     pretty_table(data)
     
     println("\nObjective Value: \$$(round(objective_value(m), digits=2))")
+
+    ess_surplus = data.Discharge' * data.Price - data.Charge' * data.Price - 
+        inputs.epsilon * sum(data.Charge) - inputs.zeta * sum(data.Discharge) + 
+        inputs.b * (data.SOC[end] - m[:s_double_bar])
+    # TODO Ross has $43,111 for ESS Surplus in the base case. I get $9577.78 
+    println("\nESS Surplus: \$$(round(ess_surplus, digits=2))")
 
 end
