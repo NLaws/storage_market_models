@@ -54,7 +54,7 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 \end{aligned}
 ```
 
-# Time-independent model
+# Time-independent model (incomplete)
 ```math
 \begin{aligned}
 \min  & \quad \boldsymbol c_x^\intercal \boldsymbol x + \boldsymbol c_r^\intercal \boldsymbol r 
@@ -72,7 +72,7 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 \\
 &\quad \ p_t \perp g_t                   &\forall t \in \mathcal{T}
 \\
-&\quad \ \underline{s} \leq s_t \leq \overline{s}
+&\quad \ \underline{s} \leq s_t \leq \overline{s}   &\forall t \in \mathcal{T}
 \end{aligned}
 ```
 
