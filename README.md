@@ -54,7 +54,7 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 \end{aligned}
 ```
 
-# Multi-interval bids model (incomplete)
+# Multi-interval bids model
 ```math
 \begin{aligned}
 \min  & \quad \boldsymbol c_x^\intercal \boldsymbol x + \boldsymbol c_r^\intercal \boldsymbol r 
