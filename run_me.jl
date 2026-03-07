@@ -7,7 +7,12 @@ function run_base()
     m = build_single_bid_model(inputs_base)
     optimize!(m)
     print_results(inputs_base, m)
-    return m
+
+
+    m = build_multi_bid_model(inputs_base)
+    optimize!(m)
+    print_results(inputs_base, m)
+
 end
 
 run_base()

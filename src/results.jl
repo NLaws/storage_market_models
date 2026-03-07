@@ -2,6 +2,17 @@
 function print_results(inputs::Inputs, m::JuMP.AbstractModel)
 
     T = length(inputs_base.demand)
+
+    if :z in keys(m.obj_dict)
+        @warn "Model contains binary variables. Fixing z and re-solving as an LP to get duals for price calculation."
+        zstar = value.(m[:z])
+
+        for t in 1:T
+            fix(m[:z][t], round(zstar[t]); force = true)
+        end
+        undo = relax_integrality(m)   # relax remaining integrality flags
+        optimize!(m)                  # LP with z fixed
+    end
     
     # Create a table of results using DataFrames for easier formatting
     data = (
@@ -23,5 +34,14 @@ function print_results(inputs::Inputs, m::JuMP.AbstractModel)
         inputs.b * (data.SOC[end] - m[:s_double_bar])
     # TODO Ross has $43,111 for ESS Surplus in the base case. I get $9577.78 
     println("\nESS Surplus: \$$(round(ess_surplus, digits=2))")
+
+    ess_profit = data.Discharge' * data.Price - data.Charge' * data.Price
+    println("\nESS Profit: \$$(round(ess_profit, digits=2))")
+
+    cost_to_serve = data.Thermal' * data.Price + 
+        data.Renewable' * data.Price +
+        data.Discharge' * data.Price -
+        data.Charge' * data.Price
+    println("\nCost to Serve: \$$(round(cost_to_serve, digits=2))")
 
 end

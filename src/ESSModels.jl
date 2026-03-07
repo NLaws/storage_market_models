@@ -8,6 +8,7 @@ export
     Inputs,
     inputs_base,
     build_single_bid_model,
+    build_multi_bid_model,
     print_results
 
 include("./inputs.jl")

@@ -74,7 +74,7 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 \\
 &\quad \ \underline{s} \leq s_t \leq \overline{s}   &\forall t \in \mathcal{T}
 \\
-&\quad \ s_t = s_{t-1} - \Delta T \left( p_t + \eta g_t + \text{A.S terms} \right)
+&\quad \ s_t = s_{t-1} + \Delta T \eta p_t - \Delta T g_t + \text{A.S terms}
 &\forall t \in \mathcal{T}
 \end{aligned}
 ```
