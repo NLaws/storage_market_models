@@ -7,7 +7,7 @@ using PrettyTables
 export
     Inputs,
     inputs_base,
-    build_time_coupled_model,
+    build_single_bid_model,
     print_results
 
 include("./inputs.jl")

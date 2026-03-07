@@ -11,7 +11,7 @@ julia1.11 --project=. run_me.jl
 - $s_t$ state of charge
 - $p_t$ charge
 - $g_t$ discharge
-- $b$ storage bid for energy in last time interval $T$
+- $b_T$ storage bid for energy in last time interval $T$
 - $\overline{\overline{s_T}} = \gamma^T s_0$ SOC at the end of the DA
 horizon if the ESS were to neither charge nor discharge during the horizon
 - $\alpha$ charge efficiency
@@ -20,14 +20,14 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 - $\epsilon$ charge degradation cost
 - $\zeta$ discharge degradation cost
 
-# Time-coupled model
+# End-interval bid model
 ```math
 \begin{aligned}
 \min  & \quad \boldsymbol c_x^\intercal \boldsymbol x + \boldsymbol c_r^\intercal \boldsymbol r 
 \\ & \quad 
 + \epsilon \sum_{t \in \mathcal T} p_t 
 + \zeta \sum_{t \in \mathcal T} g_t
-- b \left( s_T - \overline{\overline{s_T}}\right)
+- b_T \left( s_T - \overline{\overline{s_T}}\right)
 \\
 \text{s.t.} &\quad x_t + g_t + r_t - p_t = d_t  &\forall t \in \mathcal{T}
 \\
@@ -54,7 +54,7 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 \end{aligned}
 ```
 
-# Time-independent model (incomplete)
+# Multi-interval bids model (incomplete)
 ```math
 \begin{aligned}
 \min  & \quad \boldsymbol c_x^\intercal \boldsymbol x + \boldsymbol c_r^\intercal \boldsymbol r 
@@ -73,6 +73,9 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 &\quad \ p_t \perp g_t                   &\forall t \in \mathcal{T}
 \\
 &\quad \ \underline{s} \leq s_t \leq \overline{s}   &\forall t \in \mathcal{T}
+\\
+&\quad \ s_t = s_{t-1} - \Delta T \left( p_t + \eta g_t + \text{A.S terms} \right)
+&\forall t \in \mathcal{T}
 \end{aligned}
 ```
 
@@ -81,3 +84,5 @@ horizon if the ESS were to neither charge nor discharge during the horizon
     - with varying ESS offers/bids (use `b` in time-coupled model?)
 - show results in notebook? (so they are in the repo)
     - or add a docs page that fills via running the code
+- forecast errors: random noise on baseline prices
+- scenarios with ESS as price-maker and taker

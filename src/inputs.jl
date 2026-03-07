@@ -17,6 +17,9 @@ Base.@kwdef struct Inputs
     thermal_offer_price::Float64
     thermal_max::Float64
     thermal_min::Float64
+    eta::Float64
+    ess_bids::Vector{Float64}
+    ess_offers::Vector{Float64}
 end
 
 inputs_base = Inputs(;
@@ -38,4 +41,7 @@ inputs_base = Inputs(;
     thermal_offer_price=50.0,
     thermal_max = 100.0,
     thermal_min = 0.0,
+    eta = 0.9,
+    ess_bids = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+    ess_offers = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
 )

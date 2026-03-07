@@ -1,5 +1,6 @@
 
-function build_time_coupled_model(inputs::Inputs)::JuMP.AbstractModel
+
+function build_single_bid_model(inputs::Inputs)::JuMP.AbstractModel
 
     m = JuMP.Model(HiGHS.Optimizer)
 
