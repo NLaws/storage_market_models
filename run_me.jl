@@ -22,8 +22,8 @@ end
 function run_noisy_offers()
     output_csv = run_noisy_offer_experiment(
         inputs_base;
-        n_samples = 5,
-        sigma = 5.0,
+        n_samples = 10000,
+        sigma = 10.0,
         seed = 42,
         output_csv = "outputs/noisy_offer_results.csv",
     )

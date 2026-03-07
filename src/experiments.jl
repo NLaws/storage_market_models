@@ -45,6 +45,7 @@ function run_noisy_offer_experiment(
     set_silent(single_model)
 
     optimize!(single_model)
+    single_results = collect_results(inputs, single_model)
 
     T = length(inputs.demand)
     optimized_prices = [dual(single_model[:load_balance][t]) for t in 1:T]
@@ -54,6 +55,17 @@ function run_noisy_offer_experiment(
     mkpath(dirname(output_csv))
     open(output_csv, "w") do io
         println(io, "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve")
+        println(io,
+            string(
+                0, ",",
+                0, ",",
+                "NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,",
+                round(single_results.objective_value, digits = 4), ",",
+                round(single_results.ess_surplus, digits = 4), ",",
+                round(single_results.ess_profit, digits = 4), ",",
+                round(single_results.cost_to_serve, digits = 4),
+            )
+        )
 
         for sample in 1:n_samples
             noise = sigma .* randn(rng, T)

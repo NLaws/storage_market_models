@@ -43,6 +43,6 @@ inputs_base = Inputs(;
     thermal_min = 0.0,
     eta = 0.9,
     # perfect foresight bids and offers
-    ess_bids = [43.1, 50.0, 0.0, 0.0, 50.0, 50.0],
+    ess_bids = [43.1, 50.0, 0.0, 0.0, 50.0, 40.0],
     ess_offers = [43.1, 50.0, 0.0, 0.0, 49.9, 49.9],
 )
