@@ -78,14 +78,6 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
             + s[t-1]
     )
 
-    @constraint(m, [t = 1:T],
-        s[t] <= inputs.soc_max
-    )
-
-    @constraint(m, [t = 1:T],
-        s[t] >= inputs.soc_min
-    )
-
     @constraint(m, load_balance[t = 1:T],
         x[t] + g[t] + r[t] - p[t] == inputs.demand[t]
     )

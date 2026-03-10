@@ -70,6 +70,8 @@ function run_noisy_offer_experiment(
         for sample in 1:n_samples
             noise = sigma .* randn(rng, T)
             offers = max.(optimized_prices .+ noise, clamp_min)
+            # hack for now: set the offer in time T to single bid model's willingness to pay for final SOC
+            offers[end] = inputs.b
 
             sample_inputs = replace_ess_offers(inputs, offers)
             m = build_multi_bid_model(sample_inputs)
