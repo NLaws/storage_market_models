@@ -39,12 +39,17 @@ function collect_results(inputs::Inputs, m::JuMP.AbstractModel; resolve_binary_f
         data.Charge' * data.Price
     cost_to_serve = round(cost_to_serve, digits = 2)
 
+    actual_cost = data.Thermal' * data.Price - inputs.b * (data.SOC[end] - m[:s_double_bar])
+    actual_cost = round(actual_cost, digits = 2)
+
+
     return (
         data = data,
         objective_value = objective,
         ess_surplus = ess_surplus,
         ess_profit = ess_profit,
         cost_to_serve = cost_to_serve,
+        actual_cost = actual_cost,
     )
 end
 

@@ -54,7 +54,7 @@ function run_noisy_offer_experiment(
 
     mkpath(dirname(output_csv))
     open(output_csv, "w") do io
-        println(io, "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve")
+        println(io, "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost")
         println(io,
             string(
                 0, ",",
@@ -63,7 +63,8 @@ function run_noisy_offer_experiment(
                 round(single_results.objective_value, digits = 4), ",",
                 round(single_results.ess_surplus, digits = 4), ",",
                 round(single_results.ess_profit, digits = 4), ",",
-                round(single_results.cost_to_serve, digits = 4),
+                round(single_results.cost_to_serve, digits = 4), ",",
+                round(single_results.actual_cost, digits = 4),
             )
         )
 
@@ -99,7 +100,8 @@ function run_noisy_offer_experiment(
                         round(results.objective_value, digits = 4), ",",
                         round(results.ess_surplus, digits = 4), ",",
                         round(results.ess_profit, digits = 4), ",",
-                        round(results.cost_to_serve, digits = 4),
+                        round(results.cost_to_serve, digits = 4), ",",
+                        round(results.actual_cost, digits = 4),
                     )
                 )
             end
