@@ -20,14 +20,16 @@ function run_base()
 end
 
 function run_noisy_offers()
-    output_csv = run_noisy_offer_experiment(
+    output_paths = run_noisy_offer_experiment(
         inputs_base;
         n_samples = 10000,
         sigma = 10.0,
         seed = 42,
-        output_csv = "outputs/noisy_offer_results.csv",
+        multi_output_csv = "outputs/noisy_offer_multibid_results.csv",
+        single_output_csv = "outputs/noisy_offer_singlebid_results.csv",
     )
-    println("Wrote noisy-offer experiment results to: $(output_csv)")
+    println("Wrote noisy-offer multibid results to: $(output_paths.multi_output_csv)")
+    println("Wrote noisy-offer singlebid results to: $(output_paths.single_output_csv)")
 end
 
 # run_base()

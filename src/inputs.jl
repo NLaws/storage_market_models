@@ -1,4 +1,4 @@
-Base.@kwdef struct Inputs
+Base.@kwdef mutable struct Inputs
     demand::Vector{Float64}
     renewable_capacity::Vector{Float64}
     renewable_offer_price::Float64
