@@ -24,6 +24,8 @@ function run_noisy_offers()
         inputs_base;
         n_samples = 10000,
         sigma = 10.0,
+        max_willingness_to_pay = 60.0,
+        min_willingness_to_pay = 0.0,
         seed = 42,
         multi_output_csv = "outputs/noisy_offer_multibid_results.csv",
         single_output_csv = "outputs/noisy_offer_singlebid_results.csv",

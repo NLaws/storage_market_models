@@ -1,6 +1,12 @@
 using Random
 
 
+function uniform_samples(xmin, xmax, N)
+    xmin <= xmax || throw(ArgumentError("xmin must be <= xmax"))
+    return xmin .+ (xmax - xmin) .* rand(N)
+end
+
+
 function replace_inputs(
     inputs::Inputs;
     b::Float64 = inputs.b,
@@ -88,7 +94,8 @@ function run_noisy_offer_experiment(
     sigma::Float64 = 5.0,
     seed::Int = 1,
     clamp_min::Float64 = 0.0,
-    baseline_willingness_to_pay::Float64 = 40.0,
+    max_willingness_to_pay::Float64 = 40.0,
+    min_willingness_to_pay::Float64 = 0.0,
     multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
     single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
 )
@@ -102,7 +109,7 @@ function run_noisy_offer_experiment(
     optimized_prices = [dual(single_model[:load_balance][t]) for t in 1:T]
 
     rng = MersenneTwister(seed)
-    sample_bs = sigma .* randn(rng, n_samples)
+    sample_bs = uniform_samples(min_willingness_to_pay, max_willingness_to_pay, n_samples)
     noise_by_sample = [sigma .* randn(rng, T) for _ in 1:n_samples]
     header = "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost"
 
@@ -117,7 +124,6 @@ function run_noisy_offer_experiment(
             offers = max.(optimized_prices .+ noise, clamp_min)
             sample_inputs = replace_inputs(
                 inputs; 
-                b = baseline_willingness_to_pay + sample_bs[sample], 
                 ess_offers = offers,
             )
             m = build_multi_bid_model(sample_inputs)
@@ -156,7 +162,7 @@ function run_noisy_offer_experiment(
         println(io, header)
 
         for sample in 1:n_samples
-            sample_inputs = replace_inputs(inputs; b = baseline_willingness_to_pay + sample_bs[sample])
+            sample_inputs = replace_inputs(inputs; b = sample_bs[sample])
             m = build_single_bid_model(sample_inputs)
             set_silent(m)
 
@@ -170,7 +176,8 @@ function run_noisy_offer_experiment(
                     t,
                     "NaN",
                     "NaN",
-                    "NaN",
+                    # abuse the bid column to store the willingness to pay for single-bid samples
+                    sample_inputs.b,
                     round(sample_inputs.b, digits = 4),
                     sample_inputs.demand[t],
                     results.data.Thermal[t],
