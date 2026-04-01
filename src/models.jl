@@ -82,7 +82,7 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
         x[t] + g[t] + r[t] - p[t] == inputs.demand[t]
     )
 
-     m[:s_double_bar] = 0.0
+    m[:s_double_bar] = inputs.gamma^T * inputs.soc_init
     
     @objective(m, Min, 
         inputs.thermal_offer_price * sum([x[t] for t = 1:T])
