@@ -106,6 +106,7 @@ function run_uniform_error_multibid_experiment(
     bids = inputs.ess_bids
     if bid_perfect_foresight
         bids = ifelse.(optimal_results.data.Charge .> 0, 0, inputs.ess_bids)
+        output_csv = replace(output_csv, ".csv" => "_bid_perfect_foresight.csv")
     end
 
     noise_by_sample = uniform_samples(-error_range, error_range, n_samples)
@@ -190,6 +191,8 @@ function run_noisy_offer_experiment(
     bids = inputs.ess_bids
     if bid_perfect_foresight
         bids = ifelse.(optimal_results.data.Charge .> 0, 0, inputs.ess_bids)
+        multi_output_csv = replace(multi_output_csv, ".csv" => "_bid_perfect_foresight.csv")
+        single_output_csv = replace(single_output_csv, ".csv" => "_bid_perfect_foresight.csv")
     end
 
     rng = MersenneTwister(seed)
