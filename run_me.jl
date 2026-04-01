@@ -34,5 +34,16 @@ function run_noisy_offers()
     println("Wrote noisy-offer singlebid results to: $(output_paths.single_output_csv)")
 end
 
+function run_uniform_error()
+    output_path = run_uniform_error_multibid_experiment(
+        inputs_base;
+        n_samples = 10000,
+        error_range = 20.0,
+        output_csv = "outputs/uniform_error_multibid_results.csv",
+    )
+    println("Wrote uniform-error multibid results to: $(output_path.output_csv)")
+end
+
 # run_base()
-run_noisy_offers()
+# run_noisy_offers()
+run_uniform_error()

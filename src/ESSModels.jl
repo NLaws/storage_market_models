@@ -11,7 +11,8 @@ export
     build_multi_bid_model,
     collect_results,
     print_results,
-    run_noisy_offer_experiment
+    run_noisy_offer_experiment,
+    run_uniform_error_multibid_experiment
 
 include("./inputs.jl")
 include("./models.jl")
