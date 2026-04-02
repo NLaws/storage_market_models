@@ -86,14 +86,31 @@ function write_results_row(
 end
 
 
+"""
+    run_uniform_error_multibid_experiment(
+        inputs::Inputs;
+        n_samples::Int = 100,
+        error_range::Float64 = 10.0,
+        clamp_min::Float64 = 0.0,
+        output_csv::AbstractString = "outputs/uniform_error_multibid_results.csv",
+        bid_perfect_foresight::Bool = true,
+    )
+
+Runs the multibid experiment for a given set of inputs, adding uniformly distributed noise to the
+optimized prices and varying the willingness to pay for the single-bid experiment. Writes results to
+a CSV file. 
+
+If `bid_perfect_foresight` is true, sets bids to zero in any time period where the
+optimal charge is greater than zero.
+"""
 function run_uniform_error_multibid_experiment(
-    inputs::Inputs;
-    n_samples::Int = 100,
-    error_range::Float64 = 10.0,
-    clamp_min::Float64 = 0.0,
-    output_csv::AbstractString = "outputs/uniform_error_multibid_results.csv",
-    bid_perfect_foresight::Bool = true,
-)
+        inputs::Inputs;
+        n_samples::Int = 100,
+        error_range::Float64 = 10.0,
+        clamp_min::Float64 = 0.0,
+        output_csv::AbstractString = "outputs/uniform_error_multibid_results.csv",
+        bid_perfect_foresight::Bool = true,
+    )
     single_model = build_single_bid_model(inputs)
     set_silent(single_model)
 
@@ -164,20 +181,39 @@ end
 
 
 """
-    run_noisy_offer_experiment
+    run_noisy_offer_experiment(
+        inputs::Inputs;
+        n_samples::Int = 100,
+        sigma::Float64 = 5.0,
+        seed::Int = 1,
+        clamp_min::Float64 = 0.0,
+        max_willingness_to_pay::Float64 = 40.0,
+        min_willingness_to_pay::Float64 = 0.0,
+        multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
+        single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
+        bid_perfect_foresight::Bool = true,
+    )
+
+Runs the multibid and single-bid experiments for a given set of inputs, adding normally distributed
+noise to the optimized prices for the multibid experiment and varying the willingness to pay for the
+single-bid experiment. Writes results to separate CSV files for the multibid and single-bid
+experiments.
+
+If `bid_perfect_foresight` is true, sets bids to zero in any time period where the optimal charge is
+greater than zero for both the single-bid and multibid experiments.
 """
 function run_noisy_offer_experiment(
-    inputs::Inputs;
-    n_samples::Int = 100,
-    sigma::Float64 = 5.0,
-    seed::Int = 1,
-    clamp_min::Float64 = 0.0,
-    max_willingness_to_pay::Float64 = 40.0,
-    min_willingness_to_pay::Float64 = 0.0,
-    multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
-    single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
-    bid_perfect_foresight::Bool = true,
-)
+        inputs::Inputs;
+        n_samples::Int = 100,
+        sigma::Float64 = 5.0,
+        seed::Int = 1,
+        clamp_min::Float64 = 0.0,
+        max_willingness_to_pay::Float64 = 40.0,
+        min_willingness_to_pay::Float64 = 0.0,
+        multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
+        single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
+        bid_perfect_foresight::Bool = true,
+    )
 
     single_model = build_single_bid_model(inputs)
     set_silent(single_model)
@@ -197,6 +233,8 @@ function run_noisy_offer_experiment(
 
     rng = MersenneTwister(seed)
     sample_bs = uniform_samples(min_willingness_to_pay, max_willingness_to_pay, n_samples)
+    # make sure we get a scenario with zero willingness to pay for the single-bid experiment
+    sample_bs[1] = 0.0
     noise_by_sample = [sigma .* randn(rng, T) for _ in 1:n_samples]
     header = "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost"
 
