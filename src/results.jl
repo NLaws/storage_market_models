@@ -1,6 +1,18 @@
+function has_solution(m::JuMP.AbstractModel)
+    result_count = JuMP.result_count(m)
+    if result_count == 0
+        return false
+    end
+    return true
+end
+
+
 function collect_results(inputs::Inputs, m::JuMP.AbstractModel; resolve_binary_for_duals::Bool = true)
 
     T = length(inputs.demand)
+    if !has_solution(m)
+        return nothing
+    end
 
     if resolve_binary_for_duals && (:z in keys(m.obj_dict))
         @debug "Model contains binary variables. Fixing z and re-solving as an LP to get duals for price calculation."
@@ -11,6 +23,9 @@ function collect_results(inputs::Inputs, m::JuMP.AbstractModel; resolve_binary_f
         end
         relax_integrality(m)
         optimize!(m)
+        if !has_solution(m)
+            return nothing
+        end
     end
 
     data = (

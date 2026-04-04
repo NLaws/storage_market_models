@@ -1,4 +1,16 @@
-include("./src/ESSModels.jl")
+using Distributed
+
+if nworkers() == 0
+    n_local_workers = max(Sys.CPU_THREADS - 1, 1)
+    addprocs(
+        n_local_workers;
+        exeflags = "--project=$(Base.active_project()) --threads=1",
+    )
+end
+
+@everywhere include(joinpath(@__DIR__, "src", "ESSModels.jl"))
+@everywhere using .ESSModels
+
 using .ESSModels
 using JuMP
 
@@ -47,6 +59,7 @@ function run_uniform_error(;bid_perfect_foresight::Bool)
     println("Wrote uniform-error multibid results to: $(output_path.output_csv)")
 end
 
+# julia --project=. -p 6 run_me.jl
 # run_base()
 run_noisy_offers(bid_perfect_foresight = true)
 run_uniform_error(bid_perfect_foresight = true)

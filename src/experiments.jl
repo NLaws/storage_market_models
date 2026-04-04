@@ -1,4 +1,5 @@
 using Random
+using Distributed
 
 
 function uniform_samples(xmin, xmax, N)
@@ -86,6 +87,246 @@ function write_results_row(
 end
 
 
+function configure_experiment_model!(m)
+    set_silent(m)
+    set_attribute(m, JuMP.MOI.NumberOfThreads(), 1)
+    return m
+end
+
+
+function assert_sample_has_solution(m, sample::Int, label::AbstractString)
+    result_count = JuMP.result_count(m)
+    if result_count == 0
+        termination = JuMP.termination_status(m)
+        primal = JuMP.primal_status(m)
+        dual = JuMP.dual_status(m)
+        raw_status = JuMP.raw_status(m)
+        error(
+            "Sample $(sample) in $(label) has no solution. " *
+            "termination_status=$(termination), primal_status=$(primal), " *
+            "dual_status=$(dual), raw_status=\"$(raw_status)\"",
+        )
+    end
+    return nothing
+end
+
+
+function log_sample_progress!(
+    progress::Base.RefValue{Int},
+    n_samples::Int,
+    label::AbstractString,
+    log_every::Int,
+)
+    log_every = max(log_every, 1)
+    progress[] += 1
+    completed = progress[]
+    if completed == 1 || completed == n_samples || completed % log_every == 0
+        println("[$(label)] completed $(completed)/$(n_samples) samples")
+    end
+    return nothing
+end
+
+
+function map_samples(
+        f,
+        samples,
+        label::AbstractString;
+        show_progress::Bool = true,
+        log_every::Int = 250,
+    )
+    n_samples = length(samples)
+    if nworkers() == 0
+        progress = Ref(0)
+        return map(samples) do sample
+            result = f(sample)
+            if show_progress
+                log_sample_progress!(progress, n_samples, label, log_every)
+            end
+            return result
+        end
+    end
+
+    pool = Distributed.CachingPool(workers())
+    progress_channel = show_progress ? RemoteChannel(() -> Channel{Union{Int, Nothing}}(n_samples + 1)) : nothing
+
+    logger_task = if show_progress
+        @async begin
+            progress = Ref(0)
+            while true
+                update = take!(progress_channel)
+                isnothing(update) && break
+                log_sample_progress!(progress, n_samples, label, log_every)
+            end
+        end
+    else
+        nothing
+    end
+
+    try
+        return Distributed.pmap(pool, samples) do sample
+            result = f(sample)
+            if show_progress
+                put!(progress_channel, 1)
+            end
+            return result
+        end
+    finally
+        if show_progress
+            put!(progress_channel, nothing)
+            wait(logger_task)
+        end
+    end
+end
+
+
+function build_uniform_error_multibid_sample_rows(
+        sample::Int,
+        inputs::Inputs,
+        bids,
+        optimized_prices,
+        noise_by_sample,
+        clamp_min::Float64,
+        T::Int,
+    )
+    noise = noise_by_sample[sample]
+    offers = max.(optimized_prices .+ noise, clamp_min)
+    sample_inputs = replace_inputs(
+        inputs;
+        ess_offers = offers,
+        ess_bids = bids,
+    )
+    m = build_multi_bid_model(sample_inputs)
+    configure_experiment_model!(m)
+
+    optimize!(m)
+    assert_sample_has_solution(m, sample, "uniform_error_multibid")
+    results = collect_results(sample_inputs, m)
+    isnothing(results) && return nothing
+
+    io = IOBuffer()
+    for t in 1:T
+        write_results_row(
+            io,
+            sample,
+            t,
+            round(optimized_prices[t], digits = 4),
+            round(noise, digits = 4),
+            round(offers[t], digits = 4),
+            round(sample_inputs.ess_bids[t], digits = 4),
+            sample_inputs.demand[t],
+            results.data.Thermal[t],
+            results.data.Renewable[t],
+            results.data.Charge[t],
+            results.data.Discharge[t],
+            results.data.SOC[t],
+            results.data.Price[t],
+            results.objective_value,
+            results.ess_surplus,
+            results.ess_profit,
+            results.cost_to_serve,
+            results.actual_cost,
+        )
+    end
+    return String(take!(io))
+end
+
+
+function build_noisy_offer_multibid_sample_rows(
+        sample::Int,
+        inputs::Inputs,
+        bids,
+        optimized_prices,
+        noise_by_sample,
+        clamp_min::Float64,
+        T::Int,
+    )
+    noise = noise_by_sample[sample]
+    offers = max.(optimized_prices .+ noise, clamp_min)
+    sample_inputs = replace_inputs(
+        inputs;
+        ess_offers = offers,
+        ess_bids = bids,
+    )
+    m = build_multi_bid_model(sample_inputs)
+    configure_experiment_model!(m)
+
+    optimize!(m)
+    assert_sample_has_solution(m, sample, "noisy_offer_multibid")
+    results = collect_results(sample_inputs, m)
+    isnothing(results) && return nothing
+
+    io = IOBuffer()
+    for t in 1:T
+        write_results_row(
+            io,
+            sample,
+            t,
+            round(optimized_prices[t], digits = 4),
+            round(noise[t], digits = 4),
+            round(offers[t], digits = 4),
+            round(sample_inputs.ess_bids[t], digits = 4),
+            sample_inputs.demand[t],
+            results.data.Thermal[t],
+            results.data.Renewable[t],
+            results.data.Charge[t],
+            results.data.Discharge[t],
+            results.data.SOC[t],
+            results.data.Price[t],
+            results.objective_value,
+            results.ess_surplus,
+            results.ess_profit,
+            results.cost_to_serve,
+            results.actual_cost,
+        )
+    end
+    return String(take!(io))
+end
+
+
+function build_noisy_offer_singlebid_sample_rows(
+        sample::Int,
+        inputs::Inputs,
+        bids,
+        sample_bs,
+        T::Int,
+    )
+    sample_inputs = replace_inputs(inputs; b = sample_bs[sample], ess_bids = bids)
+    m = build_single_bid_model(sample_inputs)
+    configure_experiment_model!(m)
+
+    optimize!(m)
+    assert_sample_has_solution(m, sample, "noisy_offer_singlebid")
+    results = collect_results(sample_inputs, m)
+    isnothing(results) && return nothing
+
+    io = IOBuffer()
+    for t in 1:T
+        write_results_row(
+            io,
+            sample,
+            t,
+            "NaN",
+            "NaN",
+            sample_inputs.b,
+            round(sample_inputs.b, digits = 4),
+            sample_inputs.demand[t],
+            results.data.Thermal[t],
+            results.data.Renewable[t],
+            results.data.Charge[t],
+            results.data.Discharge[t],
+            results.data.SOC[t],
+            results.data.Price[t],
+            results.objective_value,
+            results.ess_surplus,
+            results.ess_profit,
+            results.cost_to_serve,
+            results.actual_cost,
+        )
+    end
+    return String(take!(io))
+end
+
+
 """
     run_uniform_error_multibid_experiment(
         inputs::Inputs;
@@ -110,9 +351,11 @@ function run_uniform_error_multibid_experiment(
         clamp_min::Float64 = 0.0,
         output_csv::AbstractString = "outputs/uniform_error_multibid_results.csv",
         bid_perfect_foresight::Bool = true,
+        show_progress::Bool = true,
+        log_every::Int = 250,
     )
     single_model = build_single_bid_model(inputs)
-    set_silent(single_model)
+    configure_experiment_model!(single_model)
 
     optimize!(single_model)
 
@@ -130,47 +373,28 @@ function run_uniform_error_multibid_experiment(
     header = "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost"
 
     mkpath(dirname(output_csv))
+    sample_rows = map_samples(
+        sample -> build_uniform_error_multibid_sample_rows(
+            sample,
+            inputs,
+            bids,
+            optimized_prices,
+            noise_by_sample,
+            clamp_min,
+            T,
+        ),
+        1:n_samples,
+        "uniform_error_multibid";
+        show_progress = show_progress,
+        log_every = log_every,
+    )
 
     open(output_csv, "w") do io
         println(io, header)
-
         for sample in 1:n_samples
-            noise = noise_by_sample[sample]
-            offers = max.(optimized_prices .+ noise, clamp_min)
-            sample_inputs = replace_inputs(
-                inputs; 
-                ess_offers = offers,
-                ess_bids = bids,
-            )
-            m = build_multi_bid_model(sample_inputs)
-            set_silent(m)
-
-            optimize!(m)
-            results = collect_results(sample_inputs, m)
-
-            for t in 1:T
-                write_results_row(
-                    io,
-                    sample,
-                    t,
-                    round(optimized_prices[t], digits = 4),
-                    round(noise, digits = 4),
-                    round(offers[t], digits = 4),
-                    round(sample_inputs.ess_bids[t], digits = 4),
-                    sample_inputs.demand[t],
-                    results.data.Thermal[t],
-                    results.data.Renewable[t],
-                    results.data.Charge[t],
-                    results.data.Discharge[t],
-                    results.data.SOC[t],
-                    results.data.Price[t],
-                    results.objective_value,
-                    results.ess_surplus,
-                    results.ess_profit,
-                    results.cost_to_serve,
-                    results.actual_cost,
-                )
-            end
+            rows = sample_rows[sample]
+            isnothing(rows) && continue
+            print(io, rows)
         end
     end
 
@@ -213,10 +437,11 @@ function run_noisy_offer_experiment(
         multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
         single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
         bid_perfect_foresight::Bool = true,
+        show_progress::Bool = true,
+        log_every::Int = 50,
     )
-
     single_model = build_single_bid_model(inputs)
-    set_silent(single_model)
+    configure_experiment_model!(single_model)
 
     optimize!(single_model)
 
@@ -240,85 +465,51 @@ function run_noisy_offer_experiment(
 
     mkpath(dirname(multi_output_csv))
     mkpath(dirname(single_output_csv))
+    multi_sample_rows = map_samples(
+        sample -> build_noisy_offer_multibid_sample_rows(
+            sample,
+            inputs,
+            bids,
+            optimized_prices,
+            noise_by_sample,
+            clamp_min,
+            T,
+        ),
+        1:n_samples,
+        "noisy_offer_multibid";
+        show_progress = show_progress,
+        log_every = log_every,
+    )
 
     open(multi_output_csv, "w") do io
         println(io, header)
-
         for sample in 1:n_samples
-            noise = noise_by_sample[sample]
-            offers = max.(optimized_prices .+ noise, clamp_min)
-            sample_inputs = replace_inputs(
-                inputs; 
-                ess_offers = offers,
-                ess_bids = bids,
-            )
-            m = build_multi_bid_model(sample_inputs)
-            set_silent(m)
-
-            optimize!(m)
-            results = collect_results(sample_inputs, m)
-
-            for t in 1:T
-                write_results_row(
-                    io,
-                    sample,
-                    t,
-                    round(optimized_prices[t], digits = 4),
-                    round(noise[t], digits = 4),
-                    round(offers[t], digits = 4),
-                    round(sample_inputs.ess_bids[t], digits = 4),
-                    sample_inputs.demand[t],
-                    results.data.Thermal[t],
-                    results.data.Renewable[t],
-                    results.data.Charge[t],
-                    results.data.Discharge[t],
-                    results.data.SOC[t],
-                    results.data.Price[t],
-                    results.objective_value,
-                    results.ess_surplus,
-                    results.ess_profit,
-                    results.cost_to_serve,
-                    results.actual_cost,
-                )
-            end
+            rows = multi_sample_rows[sample]
+            isnothing(rows) && continue
+            print(io, rows)
         end
     end
 
+    single_sample_rows = map_samples(
+        sample -> build_noisy_offer_singlebid_sample_rows(
+            sample,
+            inputs,
+            bids,
+            sample_bs,
+            T,
+        ),
+        1:n_samples,
+        "noisy_offer_singlebid";
+        show_progress = show_progress,
+        log_every = log_every,
+    )
+
     open(single_output_csv, "w") do io
         println(io, header)
-
         for sample in 1:n_samples
-            sample_inputs = replace_inputs(inputs; b = sample_bs[sample], ess_bids = bids)
-            m = build_single_bid_model(sample_inputs)
-            set_silent(m)
-
-            optimize!(m)
-            results = collect_results(sample_inputs, m)
-
-            for t in 1:T
-                write_results_row(
-                    io,
-                    sample,
-                    t,
-                    "NaN",
-                    "NaN",
-                    # abuse the bid column to store the willingness to pay for single-bid samples
-                    sample_inputs.b,
-                    round(sample_inputs.b, digits = 4),
-                    sample_inputs.demand[t],
-                    results.data.Thermal[t],
-                    results.data.Renewable[t],
-                    results.data.Charge[t],
-                    results.data.Discharge[t],
-                    results.data.SOC[t],
-                    results.data.Price[t],
-                    results.objective_value,
-                    results.ess_surplus,
-                    results.ess_profit,
-                    results.cost_to_serve,
-                    results.actual_cost,
-                )
-            end
+            rows = single_sample_rows[sample]
+            isnothing(rows) && continue
+            print(io, rows)
         end
     end
 
