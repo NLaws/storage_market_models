@@ -22,14 +22,23 @@ function run_base()
     optimize!(m)
     print_results(inputs_base, m)
 
+    z_star = objective_value(m)
 
-    m = build_multi_bid_model(inputs_base)
-    set_silent(m)
+    # show that the price at t=1 can be zero by not using all the renewable energy at t=1
+    # technically this raises the cost by a tiny amount
+    @constraint(m, m[:p][1] <= 100 - 1e-6)
+
+    # show that price at t=6 can be 41 by leaving a tiny amount of energy in the battery for t=6
+    # s.t. thermal is not the marginal resource at t=6
+    @constraint(m, m[:g][5] <= 100 - 1e-6)
 
     optimize!(m)
     print_results(inputs_base, m)
 
+    z_star ≈ objective_value(m) || error("Objective value changed after adding constraints to manipulate prices. Original: $z_star, New: $(objective_value(m))")
+
 end
+
 
 function run_noisy_offers(;bid_perfect_foresight::Bool)
     output_paths = run_noisy_offer_experiment(
@@ -48,6 +57,7 @@ function run_noisy_offers(;bid_perfect_foresight::Bool)
     println("Wrote noisy-offer singlebid results to: $(output_paths.single_output_csv)")
 end
 
+
 function run_uniform_error(;bid_perfect_foresight::Bool)
     output_path = run_uniform_error_multibid_experiment(
         inputs_base;
@@ -59,9 +69,10 @@ function run_uniform_error(;bid_perfect_foresight::Bool)
     println("Wrote uniform-error multibid results to: $(output_path.output_csv)")
 end
 
+
 # julia --project=. -p 6 run_me.jl
-# run_base()
-run_noisy_offers(bid_perfect_foresight = true)
-run_uniform_error(bid_perfect_foresight = true)
-run_noisy_offers(bid_perfect_foresight = false)
-run_uniform_error(bid_perfect_foresight = false)
+run_base()
+# run_noisy_offers(bid_perfect_foresight = true)
+# run_uniform_error(bid_perfect_foresight = true)
+# run_noisy_offers(bid_perfect_foresight = false)
+# run_uniform_error(bid_perfect_foresight = false)
