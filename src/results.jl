@@ -42,7 +42,7 @@ function collect_results(inputs::Inputs, m::JuMP.AbstractModel; resolve_binary_f
 
     ess_surplus = data.Discharge' * data.Price - data.Charge' * data.Price -
         inputs.epsilon * sum(data.Charge) - inputs.zeta * sum(data.Discharge) +
-        inputs.b * (data.SOC[end] - m[:s_double_bar])
+        inputs.b * (data.SOC[end] - m[:s_double_bar])  # net soc change value including degradation
     ess_surplus = round(ess_surplus, digits = 2)
 
     ess_profit = data.Discharge' * data.Price - data.Charge' * data.Price
