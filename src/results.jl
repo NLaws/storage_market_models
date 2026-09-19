@@ -39,17 +39,19 @@ function collect_results(
         Charge = round.(value.(m[:p]), digits = 2),
         Discharge = round.(value.(m[:g]), digits = 2),
         SOC = round.([value(m[:s][t]) for t in 1:T], digits = 2),
-        Price = round.([dual(m[:load_balance][t]) for t in 1:T], digits = 2),
+        # Load balance is in power units; convert its dual to an energy price.
+        Price = round.([dual(m[:load_balance][t]) / inputs.delta_T for t in 1:T], digits = 2),
     )
 
-    objective = round(objective_value(m) * inputs.delta_T, digits = 2)
+    objective = round(objective_value(m), digits = 2)
+
+    # SOC is already energy, so its terminal value needs no time scaling.
+    terminal_soc_value = inputs.b * (data.SOC[end] - m[:s_double_bar])
 
     ess_surplus = data.Discharge' * data.Price - data.Charge' * data.Price -
         # degradation cost
-        inputs.epsilon * sum(data.Charge) - inputs.zeta * sum(data.Discharge) + 
-        # net soc change value including degradation
-        inputs.b * (data.SOC[end] - m[:s_double_bar])
-    ess_surplus = round(ess_surplus * inputs.delta_T, digits = 2)
+        inputs.epsilon * sum(data.Charge) - inputs.zeta * sum(data.Discharge)
+    ess_surplus = round(ess_surplus * inputs.delta_T + terminal_soc_value, digits = 2)
 
     ess_profit = data.Discharge' * data.Price - data.Charge' * data.Price
     ess_profit = round(ess_profit* inputs.delta_T, digits = 2)
@@ -60,8 +62,7 @@ function collect_results(
         data.Charge' * data.Price
     cost_to_serve = round(cost_to_serve * inputs.delta_T, digits = 2)
 
-    actual_cost = data.Thermal' * data.Price - inputs.b * (data.SOC[end] - m[:s_double_bar])
-    actual_cost = round(actual_cost * inputs.delta_T, digits = 2)
+    actual_cost = round(data.Thermal' * data.Price * inputs.delta_T - terminal_soc_value, digits = 2)
 
 
     return (

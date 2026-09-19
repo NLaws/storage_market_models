@@ -39,11 +39,12 @@ function build_single_bid_model(inputs::Inputs, m::Union{JuMP.AbstractModel, Mis
     m[:s_double_bar] = inputs.gamma^T * inputs.soc_init
     
     @objective(m, Min, 
+        inputs.delta_T * (
         inputs.thermal_offer_price * sum([x[t] for t = 1:T])
         + inputs.renewable_offer_price * sum([r[t] for t = 1:T])
         + inputs.epsilon * sum([p[t] for t = 1:T])
         + inputs.zeta * sum([g[t] for t = 1:T])
-        - inputs.b * (s[T] - m[:s_double_bar]) / inputs.delta_T
+        ) - inputs.b * (s[T] - m[:s_double_bar])
     )
 
     return m
@@ -143,7 +144,7 @@ function build_single_bid_kkt_model(
     @constraint(m, [t = 1:T], r_ub_slack[t] == inputs.renewable_capacity[t] - r[t])
 
     @constraint(m, [t = 1:T],
-        inputs.epsilon
+        inputs.delta_T * inputs.epsilon
         - inputs.delta_T * inputs.alpha * mu[t]
         + inputs.delta_T * inputs.alpha * sigma[t]
         - lambda[t]
@@ -153,7 +154,7 @@ function build_single_bid_kkt_model(
     )
 
     @constraint(m, [t = 1:T],
-        inputs.zeta
+        inputs.delta_T * inputs.zeta
         + inputs.delta_T * inputs.beta * mu[t]
         + inputs.delta_T * inputs.beta * tau[t]
         + lambda[t]
@@ -163,7 +164,7 @@ function build_single_bid_kkt_model(
     )
 
     @constraint(m, [t = 1:T],
-        inputs.thermal_offer_price
+        inputs.delta_T * inputs.thermal_offer_price
         + lambda[t]
         - x_lb_dual[t]
         + x_ub_dual[t]
@@ -171,7 +172,7 @@ function build_single_bid_kkt_model(
     )
 
     @constraint(m, [t = 1:T],
-        inputs.renewable_offer_price
+        inputs.delta_T * inputs.renewable_offer_price
         + lambda[t]
         - r_lb_dual[t]
         + r_ub_dual[t]
@@ -247,6 +248,7 @@ function build_single_bid_kkt_model(
     @constraint(m, [t = 1:T], r_ub_slack[t] <= inputs.renewable_capacity[t] * z_r_ub[t])
     @constraint(m, [t = 1:T], r_ub_dual[t] <= dual_bound * (1 - z_r_ub[t]))
 
+    # The corresponding energy price is -lambda[t] / inputs.delta_T.
     m[:kkt_lambda] = lambda
     m[:kkt_mu] = mu
     m[:kkt_sigma] = sigma
@@ -294,10 +296,12 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
     m[:s_double_bar] = inputs.gamma^T * inputs.soc_init
     
     @objective(m, Min, 
+        inputs.delta_T * (
         inputs.thermal_offer_price * sum([x[t] for t = 1:T])
         + inputs.renewable_offer_price * sum([r[t] for t = 1:T])
         + sum(inputs.ess_offers[t] * g[t] for t in 1:T)
         - sum(inputs.ess_bids[t] * p[t] for t in 1:T)
+        )
     )
 
     return m
