@@ -11,6 +11,7 @@ export
     build_multi_bid_model,
     collect_results,
     print_results,
+    replace_inputs,
     run_noisy_offer_experiment,
     run_uniform_error_multibid_experiment
 

@@ -32,20 +32,20 @@ function run_base()
 end
 
 function run_noisy_offers(;bid_perfect_foresight::Bool)
-    output_paths = run_noisy_offer_experiment(
-        inputs_base;
-        n_samples = 10000,
-        sigma = 10.0,
-        max_willingness_to_pay = 60.0,
-        min_willingness_to_pay = 0.0,
-        seed = 42,
-        multi_output_csv = "outputs/noisy_offer_multibid_results.csv",
-        single_output_csv = "outputs/noisy_offer_singlebid_results.csv",
-        bid_perfect_foresight = bid_perfect_foresight,
-
-    )
-    println("Wrote noisy-offer multibid results to: $(output_paths.multi_output_csv)")
-    println("Wrote noisy-offer singlebid results to: $(output_paths.single_output_csv)")
+    for b in [0.0, 20.0, 40.0, 60.0]
+        inputs = replace_inputs(inputs_base; b = b)
+        output_paths = run_noisy_offer_experiment(
+            inputs;
+            n_samples = 10000,
+            sigma = 15.0,
+            seed = 42,
+            multi_output_csv = "outputs/sigma_15/noisy_offer_multibid_results_b$(b).csv",
+            single_output_csv = "outputs/sigma_15/noisy_offer_singlebid_results_b$(b).csv",
+            bid_perfect_foresight = bid_perfect_foresight,
+        )
+        println("Wrote noisy-offer multibid results to: $(output_paths.multi_output_csv)")
+        println("Wrote noisy-offer singlebid results to: $(output_paths.single_output_csv)")
+    end
 end
 
 function run_uniform_error(;bid_perfect_foresight::Bool)

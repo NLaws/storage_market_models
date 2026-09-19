@@ -7,7 +7,11 @@ function has_solution(m::JuMP.AbstractModel)
 end
 
 
-function collect_results(inputs::Inputs, m::JuMP.AbstractModel; resolve_binary_for_duals::Bool = true)
+function collect_results(
+        inputs::Inputs, 
+        m::JuMP.AbstractModel; 
+        resolve_binary_for_duals::Bool = true,
+    )
 
     T = length(inputs.demand)
     if !has_solution(m)
@@ -38,24 +42,26 @@ function collect_results(inputs::Inputs, m::JuMP.AbstractModel; resolve_binary_f
         Price = round.([dual(m[:load_balance][t]) for t in 1:T], digits = 2),
     )
 
-    objective = round(objective_value(m), digits = 2)
+    objective = round(objective_value(m) * inputs.delta_T, digits = 2)
 
     ess_surplus = data.Discharge' * data.Price - data.Charge' * data.Price -
-        inputs.epsilon * sum(data.Charge) - inputs.zeta * sum(data.Discharge) +
-        inputs.b * (data.SOC[end] - m[:s_double_bar])  # net soc change value including degradation
-    ess_surplus = round(ess_surplus, digits = 2)
+        # degradation cost
+        inputs.epsilon * sum(data.Charge) - inputs.zeta * sum(data.Discharge) + 
+        # net soc change value including degradation
+        inputs.b * (data.SOC[end] - m[:s_double_bar])
+    ess_surplus = round(ess_surplus * inputs.delta_T, digits = 2)
 
     ess_profit = data.Discharge' * data.Price - data.Charge' * data.Price
-    ess_profit = round(ess_profit, digits = 2)
+    ess_profit = round(ess_profit* inputs.delta_T, digits = 2)
 
     cost_to_serve = data.Thermal' * data.Price +
         data.Renewable' * data.Price +
         data.Discharge' * data.Price -
         data.Charge' * data.Price
-    cost_to_serve = round(cost_to_serve, digits = 2)
+    cost_to_serve = round(cost_to_serve * inputs.delta_T, digits = 2)
 
     actual_cost = data.Thermal' * data.Price - inputs.b * (data.SOC[end] - m[:s_double_bar])
-    actual_cost = round(actual_cost, digits = 2)
+    actual_cost = round(actual_cost * inputs.delta_T, digits = 2)
 
 
     return (

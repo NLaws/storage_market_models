@@ -43,7 +43,7 @@ function build_single_bid_model(inputs::Inputs, m::Union{JuMP.AbstractModel, Mis
         + inputs.renewable_offer_price * sum([r[t] for t = 1:T])
         + inputs.epsilon * sum([p[t] for t = 1:T])
         + inputs.zeta * sum([g[t] for t = 1:T])
-        - inputs.b * (s[T] - m[:s_double_bar])
+        - inputs.b * (s[T] - m[:s_double_bar]) / inputs.delta_T
     )
 
     return m

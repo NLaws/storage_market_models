@@ -3,7 +3,7 @@ using Plots.PlotMeasures: mm
 using Statistics
 using StatsPlots
 
-function _build_outer_legend_panel(labels, colors, mean_colors; show_means::Bool, legendfontsize::Integer, legend_column::Integer)
+function _build_outer_legend_panel(labels, colors, mean_colors; reference_indices, show_means::Bool, legendfontsize::Integer, legend_column::Integer)
     legend_plot = plot(
         legend = :topleft,
         framestyle = :none,
@@ -25,7 +25,7 @@ function _build_outer_legend_panel(labels, colors, mean_colors; show_means::Bool
             legend_plot,
             [NaN],
             [NaN],
-            markershape = :rect,
+            markershape = i in reference_indices ? :star5 : :rect,
             markersize = 8,
             markercolor = colors[i],
             markeralpha = 0.45,
@@ -37,6 +37,7 @@ function _build_outer_legend_panel(labels, colors, mean_colors; show_means::Bool
 
     if show_means
         for i in eachindex(labels)
+            i in reference_indices && continue
             scatter!(
                 legend_plot,
                 [NaN],
@@ -129,6 +130,8 @@ function plot_results_column_by_time(
 
     xtick_values = sort(unique(dfs[1][!, time_col]))
 
+    reference_indices = findall(df -> all(nonunique(df, time_col) .== false), dfs)
+
     x_positions = [df[!, time_col] .+ offset for (df, offset) in zip(dfs, offsets)]
 
     p = boxplot(
@@ -156,6 +159,12 @@ function plot_results_column_by_time(
     )
 
     for i in 2:length(dfs)
+        if i in reference_indices
+            scatter!(p, x_positions[i], dfs[i][!, column];
+                color = colors[i], markershape = :star5, markersize = 10,
+                label = labels[i])
+            continue
+        end
         boxplot!(
             p,
             x_positions[i],
@@ -171,6 +180,7 @@ function plot_results_column_by_time(
 
     if show_means
         for i in eachindex(dfs)
+            i in reference_indices && continue
             mean_by_time = combine(groupby(dfs[i], time_col), column => mean => :mean_value)
             sort!(mean_by_time, time_col)
 
@@ -191,6 +201,7 @@ function plot_results_column_by_time(
             labels,
             colors,
             mean_colors;
+            reference_indices = reference_indices,
             show_means = show_means,
             legendfontsize = legendfontsize,
             legend_column = legend_column,

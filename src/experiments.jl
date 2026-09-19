@@ -244,6 +244,7 @@ function build_noisy_offer_multibid_sample_rows(
     offers = max.(optimized_prices .+ noise, clamp_min)
     sample_inputs = replace_inputs(
         inputs;
+        b = inputs.b,  # Match the single-bid reference and its result calculations.
         ess_offers = offers,
         ess_bids = bids,
     )
@@ -283,22 +284,9 @@ function build_noisy_offer_multibid_sample_rows(
 end
 
 
-function build_noisy_offer_singlebid_sample_rows(
-        sample::Int,
-        inputs::Inputs,
-        bids,
-        sample_bs,
-        T::Int,
-    )
-    sample_inputs = replace_inputs(inputs; b = sample_bs[sample], ess_bids = bids)
-    m = build_single_bid_model(sample_inputs)
-    configure_experiment_model!(m)
-
-    optimize!(m)
-    assert_sample_has_solution(m, sample, "noisy_offer_singlebid")
-    results = collect_results(sample_inputs, m)
-    isnothing(results) && return nothing
-
+function build_noisy_offer_singlebid_sample_rows(inputs::Inputs, results, T::Int)
+    sample = 1
+    sample_inputs = inputs
     io = IOBuffer()
     for t in 1:T
         write_results_row(
@@ -411,20 +399,18 @@ end
         sigma::Float64 = 5.0,
         seed::Int = 1,
         clamp_min::Float64 = 0.0,
-        max_willingness_to_pay::Float64 = 40.0,
-        min_willingness_to_pay::Float64 = 0.0,
         multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
         single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
         bid_perfect_foresight::Bool = true,
     )
 
-Runs the multibid and single-bid experiments for a given set of inputs, adding normally distributed
-noise to the optimized prices for the multibid experiment and varying the willingness to pay for the
-single-bid experiment. Writes results to separate CSV files for the multibid and single-bid
-experiments.
+Runs single-bid once with the provided inputs, then adds normally distributed noise to its
+optimized prices for the multibid samples. Both use inputs.b, including result calculations.
+Writes separate CSVs with the same columns: single-bid has one sample (sample = 1), with
+one row per timestep; multibid has n_samples samples, each with one row per timestep.
 
 If `bid_perfect_foresight` is true, sets bids to zero in any time period where the optimal charge is
-greater than zero for both the single-bid and multibid experiments.
+greater than zero for the multibid experiment. The single-bid reference uses the provided inputs.
 """
 function run_noisy_offer_experiment(
         inputs::Inputs;
@@ -432,8 +418,6 @@ function run_noisy_offer_experiment(
         sigma::Float64 = 5.0,
         seed::Int = 1,
         clamp_min::Float64 = 0.0,
-        max_willingness_to_pay::Float64 = 40.0,
-        min_willingness_to_pay::Float64 = 0.0,
         multi_output_csv::AbstractString = "outputs/noisy_offer_multibid_results.csv",
         single_output_csv::AbstractString = "outputs/noisy_offer_singlebid_results.csv",
         bid_perfect_foresight::Bool = true,
@@ -457,9 +441,6 @@ function run_noisy_offer_experiment(
     end
 
     rng = MersenneTwister(seed)
-    sample_bs = uniform_samples(min_willingness_to_pay, max_willingness_to_pay, n_samples)
-    # make sure we get a scenario with zero willingness to pay for the single-bid experiment
-    sample_bs[1] = 0.0
     noise_by_sample = [sigma .* randn(rng, T) for _ in 1:n_samples]
     header = "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost"
 
@@ -490,27 +471,11 @@ function run_noisy_offer_experiment(
         end
     end
 
-    single_sample_rows = map_samples(
-        sample -> build_noisy_offer_singlebid_sample_rows(
-            sample,
-            inputs,
-            bids,
-            sample_bs,
-            T,
-        ),
-        1:n_samples,
-        "noisy_offer_singlebid";
-        show_progress = show_progress,
-        log_every = log_every,
-    )
-
+    # Reuse the single-bid reference solve above without changing any inputs.
+    single_rows = build_noisy_offer_singlebid_sample_rows(inputs, optimal_results, T)
     open(single_output_csv, "w") do io
         println(io, header)
-        for sample in 1:n_samples
-            rows = single_sample_rows[sample]
-            isnothing(rows) && continue
-            print(io, rows)
-        end
+        print(io, single_rows)
     end
 
     return (
