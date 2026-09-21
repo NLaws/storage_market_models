@@ -1,6 +1,9 @@
 
 
-function build_single_bid_model(inputs::Inputs, m::Union{JuMP.AbstractModel, Missing} = missing)::JuMP.AbstractModel
+function build_single_bid_model(
+        inputs::Inputs,
+        m::Union{JuMP.AbstractModel, Missing} = missing,
+    )::JuMP.AbstractModel
 
     if ismissing(m)
         m = JuMP.Model(HiGHS.Optimizer)
