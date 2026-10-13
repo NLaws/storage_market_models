@@ -22,17 +22,17 @@ function build_single_bid_model(
     @constraint(m, s[0] == inputs.soc_init)
 
     @constraint(m, SOC[t = 1:T],
-        s[t] == inputs.delta_T * inputs.alpha * p[t] 
-            - inputs.delta_T * inputs.beta * g[t] 
+        s[t] == inputs.delta_T * inputs.charge_efficiency * p[t] 
+            - inputs.delta_T / inputs.discharge_efficiency * g[t] 
             + inputs.gamma * s[t-1]
     )
 
     @constraint(m, [t = 1:T],
-        inputs.gamma * s[t-1] + inputs.delta_T * inputs.alpha * p[t] <= inputs.soc_max
+        inputs.gamma * s[t-1] + inputs.delta_T * inputs.charge_efficiency * p[t] <= inputs.soc_max
     )
 
     @constraint(m, [t = 1:T],
-        inputs.gamma * s[t-1] - inputs.delta_T * inputs.beta * g[t]  >= inputs.soc_min
+        inputs.gamma * s[t-1] - inputs.delta_T / inputs.discharge_efficiency * g[t]  >= inputs.soc_min
     )
 
     @constraint(m, load_balance[t = 1:T],
@@ -117,8 +117,8 @@ function build_single_bid_kkt_model(
     @constraint(m, s[0] == inputs.soc_init)
 
     @constraint(m, SOC[t = 1:T],
-        s[t] == inputs.delta_T * inputs.alpha * p[t] -
-                inputs.delta_T * inputs.beta * g[t] +
+        s[t] == inputs.delta_T * inputs.charge_efficiency * p[t] -
+                inputs.delta_T / inputs.discharge_efficiency * g[t] +
                 inputs.gamma * s[t - 1]
     )
 
@@ -128,11 +128,11 @@ function build_single_bid_kkt_model(
 
     @constraint(m, [t = 1:T],
         upper_soc_slack[t] ==
-        inputs.soc_max - inputs.gamma * s[t - 1] - inputs.delta_T * inputs.alpha * p[t]
+        inputs.soc_max - inputs.gamma * s[t - 1] - inputs.delta_T * inputs.charge_efficiency * p[t]
     )
     @constraint(m, [t = 1:T],
         lower_soc_slack[t] ==
-        inputs.gamma * s[t - 1] - inputs.delta_T * inputs.beta * g[t] - inputs.soc_min
+        inputs.gamma * s[t - 1] - inputs.delta_T / inputs.discharge_efficiency * g[t] - inputs.soc_min
     )
 
     @constraint(m, [t = 1:T], p_lb_slack[t] == p[t])
@@ -148,8 +148,8 @@ function build_single_bid_kkt_model(
 
     @constraint(m, [t = 1:T],
         inputs.delta_T * inputs.epsilon
-        - inputs.delta_T * inputs.alpha * mu[t]
-        + inputs.delta_T * inputs.alpha * sigma[t]
+        - inputs.delta_T * inputs.charge_efficiency * mu[t]
+        + inputs.delta_T * inputs.charge_efficiency * sigma[t]
         - lambda[t]
         - p_lb_dual[t]
         + p_ub_dual[t]
@@ -158,8 +158,8 @@ function build_single_bid_kkt_model(
 
     @constraint(m, [t = 1:T],
         inputs.delta_T * inputs.zeta
-        + inputs.delta_T * inputs.beta * mu[t]
-        + inputs.delta_T * inputs.beta * tau[t]
+        + inputs.delta_T / inputs.discharge_efficiency * mu[t]
+        + inputs.delta_T / inputs.discharge_efficiency * tau[t]
         + lambda[t]
         - g_lb_dual[t]
         + g_ub_dual[t]
@@ -287,9 +287,9 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
     @constraint(m, s[0] == inputs.soc_init)
 
     @constraint(m, SOC[t = 1:T],
-        s[t] == inputs.delta_T * inputs.eta * p[t] 
-            - inputs.delta_T  * g[t] 
-            + s[t-1]
+        s[t] == inputs.delta_T * inputs.charge_efficiency * p[t] 
+            - inputs.delta_T / inputs.discharge_efficiency * g[t] 
+            + inputs.gamma * s[t-1]
     )
 
     @constraint(m, load_balance[t = 1:T],

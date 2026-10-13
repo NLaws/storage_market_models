@@ -54,7 +54,7 @@ function collect_results(
     ess_surplus = round(ess_surplus * inputs.delta_T + terminal_soc_value, digits = 2)
 
     ess_profit = data.Discharge' * data.Price - data.Charge' * data.Price
-    ess_profit = round(ess_profit* inputs.delta_T, digits = 2)
+    ess_profit = round(ess_profit * inputs.delta_T, digits = 2)
 
     cost_to_serve = data.Thermal' * data.Price +
         data.Renewable' * data.Price +

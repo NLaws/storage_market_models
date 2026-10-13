@@ -8,8 +8,8 @@ Base.@kwdef mutable struct Inputs
     b::Float64  # ESS willingness to pay for s[T]
     charge_max::Float64
     discharge_max::Float64
-    alpha::Float64
-    beta::Float64
+    charge_efficiency::Float64
+    discharge_efficiency::Float64
     gamma::Float64
     epsilon::Float64
     zeta::Float64
@@ -32,8 +32,8 @@ inputs_base = Inputs(;
     b = 40.0,
     charge_max = 200.0,
     discharge_max = 200.0,
-    alpha = 0.9,
-    beta = 1.0,
+    charge_efficiency = 0.9,
+    discharge_efficiency = 0.9,
     gamma = 1.0,
     epsilon = 1.0,
     zeta = 1.0,

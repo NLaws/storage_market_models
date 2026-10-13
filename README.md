@@ -14,8 +14,8 @@ julia1.11 --project=. run_me.jl
 - $b_T$ storage bid for energy in last time interval $T$
 - $\overline{\overline{s_T}} = \gamma^T s_0$ SOC at the end of the DA
 horizon if the ESS were to neither charge nor discharge during the horizon
-- $\alpha$ charge efficiency
-- $\beta$ discharge efficiency
+- $\eta^{\text{ch}}$ charge efficiency
+- $\eta^{\text{di}}$ discharge efficiency
 - $\gamma$ per interval self-discharge
 - $\epsilon$ charge degradation cost
 - $\zeta$ discharge degradation cost
@@ -41,15 +41,15 @@ horizon if the ESS were to neither charge nor discharge during the horizon
 \\
 &\quad \ p_t \perp g_t                   &\forall t \in \mathcal{T}
 \\
-&\quad \ s_t = \Delta T \alpha p_t - \Delta T \beta g_t + \gamma s_{t-1}
+&\quad \ s_t = \Delta T \eta^{\text{ch}} p_t - \Delta T  g_t / \eta^{\text{di}}+ \gamma s_{t-1}
 &\forall t \in \mathcal{T}
 \\
 &\quad \ \underline{s} \leq s_0 \leq \overline{s}
 \\
-&\quad \ \gamma s_{t-1} + \Delta T \alpha p_t \leq \overline{s}
+&\quad \ \gamma s_{t-1} + \Delta T \eta^{\text{ch}} p_t \leq \overline{s}
 &\forall t \in \mathcal{T}
 \\
-&\quad \ \gamma s_{t-1} - \Delta T \beta g_t \geq \underline{s}
+&\quad \ \gamma s_{t-1} - \Delta T  g_t / \eta^{\text{di}} \geq \underline{s}
 &\forall t \in \mathcal{T}
 \end{aligned}
 ```
