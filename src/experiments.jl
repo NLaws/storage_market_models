@@ -24,54 +24,27 @@ function replace_inputs(
 end
 
 
-# The existing CSV format describes one battery on a copper plate.
-experiment_battery(inputs::BIMInputs) = only(keys(inputs.ess_bids))
+# One row per sample, battery, and interval. System metrics repeat across batteries.
+const EXPERIMENT_HEADER = "sample,battery,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost,battery_surplus,battery_profit"
 
-
-function write_results_row(
-        io,
-        sample::Int,
-        time::Int,
-        optimized_price,
-        noise,
-        ess_offer,
-        ess_bid,
-        demand::Float64,
-        thermal::Float64,
-        renewable::Float64,
-        charge::Float64,
-        discharge::Float64,
-        soc::Float64,
-        price::Float64,
-        objective_value::Float64,
-        ess_surplus::Float64,
-        ess_profit::Float64,
-        cost_to_serve::Float64,
-        actual_cost::Float64,
-    )
-    println(
-        io,
-        string(
-            sample, ",",
-            time, ",",
-            optimized_price, ",",
-            noise, ",",
-            ess_offer, ",",
-            ess_bid, ",",
-            round(demand, digits = 4), ",",
-            round(thermal, digits = 4), ",",
-            round(renewable, digits = 4), ",",
-            round(charge, digits = 4), ",",
-            round(discharge, digits = 4), ",",
-            round(soc, digits = 4), ",",
-            round(price, digits = 4), ",",
-            round(objective_value, digits = 4), ",",
-            round(ess_surplus, digits = 4), ",",
-            round(ess_profit, digits = 4), ",",
-            round(cost_to_serve, digits = 4), ",",
-            round(actual_cost, digits = 4),
-        ),
-    )
+function write_battery_rows(io, sample, inputs, results, net;
+        optimized_prices = results.data.Price, noise = nothing)
+    demand = CPF.total_load_p(net)
+    for name in sort!(collect(keys(results.battery_data)))
+        battery = results.battery_data[name]
+        # Escape identifiers using standard CSV quoting.
+        quoted_name = "\"" * replace(name, "\"" => "\"\"") * "\""
+        for t in 1:net.Ntimesteps
+            values = (optimized_prices[t], isnothing(noise) ? 0.0 : noise[name][t],
+                inputs.ess_offers[name][t], inputs.ess_bids[name][t], demand[t],
+                results.data.Thermal[t], results.data.Renewable[t], battery.charge[t],
+                battery.discharge[t], battery.soc[t], results.data.Price[t],
+                results.objective_value, results.ess_surplus, results.ess_profit,
+                results.cost_to_serve, results.actual_cost, battery.surplus, battery.profit)
+            println(io, sample, ",", quoted_name, ",", t, ",",
+                join(round.(values; digits = 4), ","))
+        end
+    end
 end
 
 
@@ -171,42 +144,14 @@ function build_uniform_error_multibid_sample_rows(
         network_file_path::AbstractString,
     )
     noise = noise_by_sample[sample]
-    offers = max.(optimized_prices .+ noise, clamp_min)
-    sample_inputs = replace_inputs(
-        inputs;
-        ess_offers = Dict(experiment_battery(inputs) => offers),
-        ess_bids = Dict(experiment_battery(inputs) => bids),
-    )
+    offers = Dict(name => max.(optimized_prices .+ noise[name], clamp_min) for name in keys(bids))
+    sample_inputs = replace_inputs(inputs; ess_offers = offers, ess_bids = bids)
     m, net = build_bim_multi_bid(sample_inputs, network_file_path; silent = true)
     assert_sample_has_solution(m, sample, "uniform_error_multibid")
     results = collect_results(sample_inputs, m, net)
-    isnothing(results) && return nothing
-
-    demand = CPF.total_load_p(net)
+    isnothing(results) && error("Could not collect sample $(sample)")
     io = IOBuffer()
-    for t in 1:T
-        write_results_row(
-            io,
-            sample,
-            t,
-            round(optimized_prices[t], digits = 4),
-            round(noise[t], digits = 4),
-            round(offers[t], digits = 4),
-            round(sample_inputs.ess_bids[experiment_battery(inputs)][t], digits = 4),
-            Float64(demand[t]),
-            results.data.Thermal[t],
-            results.data.Renewable[t],
-            results.data.Charge[t],
-            results.data.Discharge[t],
-            results.data.SOC[t],
-            results.data.Price[t],
-            results.objective_value,
-            results.ess_surplus,
-            results.ess_profit,
-            results.cost_to_serve,
-            results.actual_cost,
-        )
-    end
+    write_battery_rows(io, sample, sample_inputs, results, net; optimized_prices, noise)
     return String(take!(io))
 end
 
@@ -229,13 +174,13 @@ and battery degradation costs minus terminal SOC value. Its optimal prices are
 load-balance duals divided by the interval length in hours, rounded to two decimals
 by `collect_results`.
 
-Draw an independent `Uniform(-error_range, error_range)` error for every sample
-and time interval. Set each discharge offer to
+Draw an independent `Uniform(-error_range, error_range)` error for every sample,
+battery, and time interval (independent across batteries). Set each discharge offer to
 `max(optimized_prices[t] + noise[t], clamp_min)` and solve the multibid model.
 The CSV records each interval's reference price, error, offer, and clearing price.
 
 Charging bids remain `inputs.ess_bids` unless `bid_perfect_foresight` is true:
-then bids are zero wherever the reference's reported charge is positive, and the
+then each battery's bids are zero wherever its own reference charge is positive, and the
 output filename gains `_bid_perfect_foresight`.
 """
 function run_uniform_error_multibid_experiment(
@@ -249,6 +194,8 @@ function run_uniform_error_multibid_experiment(
         show_progress::Bool = true,
         log_every::Int = 250,
     )
+    n_samples > 0 || throw(ArgumentError("n_samples must be positive"))
+    isfinite(error_range) && error_range >= 0 || throw(ArgumentError("error_range must be finite and nonnegative"))
     single_model, net = build_bim_single_bid(inputs, network_file_path; silent = true)
     assert_sample_has_solution(single_model, 1, "single_bid_reference")
 
@@ -256,14 +203,19 @@ function run_uniform_error_multibid_experiment(
     optimal_results = collect_results(inputs, single_model, net)
     optimized_prices = optimal_results.data.Price
 
-    bids = inputs.ess_bids[experiment_battery(inputs)]
+    batteries = sort!(collect(keys(optimal_results.battery_data)))
+    Set(batteries) == Set(keys(inputs.ess_bids)) || throw(ArgumentError("Battery inputs must match the network"))
+    bids = deepcopy(inputs.ess_bids)
     if bid_perfect_foresight
-        bids = ifelse.(optimal_results.data.Charge .> 0, 0.0, inputs.ess_bids[experiment_battery(inputs)])
+        bids = Dict(name => ifelse.(optimal_results.battery_data[name].charge .> 0,
+            0.0, inputs.ess_bids[name]) for name in batteries)
         output_csv = replace(output_csv, ".csv" => "_bid_perfect_foresight.csv")
     end
 
-    noise_by_sample = [uniform_samples(-error_range, error_range, T) for _ in 1:n_samples]
-    header = "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost"
+    # Draw on the main process in stable battery order before distributing solves.
+    noise_by_sample = [Dict(name => uniform_samples(-error_range, error_range, T)
+        for name in batteries) for _ in 1:n_samples]
+    header = EXPERIMENT_HEADER
 
     mkpath(dirname(output_csv))
     sample_rows = map_samples(

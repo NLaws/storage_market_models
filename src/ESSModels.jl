@@ -17,6 +17,8 @@ export
     build_bim_single_bid,
     build_bim_multi_bid,
     inputs_base,
+    inputs_multiple_ess,
+    MULTIPLE_ESS_NETWORK_PATH,
     build_single_bid_model,
     build_multi_bid_model,
     collect_results,

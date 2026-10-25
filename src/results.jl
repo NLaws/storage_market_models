@@ -90,7 +90,7 @@ function print_results(inputs::Inputs, m::JuMP.AbstractModel)
 end
 
 
-"""Collect BIM copper-plate results for one battery and named thermal/renewable generators.
+"""Collect BIM copper-plate fleet and per-battery results with named thermal/renewable generators.
 
 Compute monetary metrics from unrounded dispatch; round only the reported values.
 """
@@ -98,7 +98,7 @@ function collect_results(inputs::BIMInputs, m::JuMP.AbstractModel, net)
     has_solution(m) || return nothing
     length(CPF.busses(net)) == 1 || throw(ArgumentError("Experiment CSVs require a copper-plate network"))
     bus = only(CPF.battery_busses(net))
-    battery = only(keys(m[:p_charge][bus]))
+    batteries = sort!(collect(keys(m[:p_charge][bus])))
     # Prices are LP duals conditional on the optimal charging/discharging modes.
     binaries = filter(is_binary, all_variables(m))
     if !isempty(binaries)
@@ -112,16 +112,27 @@ function collect_results(inputs::BIMInputs, m::JuMP.AbstractModel, net)
     end
     T = net.Ntimesteps
     dt = 1 / net.time_steps_per_hour
-    charge = value.(m[:p_charge][bus][battery])
-    discharge = value.(m[:p_discharge][bus][battery])
-    soc = [value(m[:soc][bus][battery][t]) for t in 1:T]
     thermal = value.(m[:p_gen][bus]["thermal"])
     renewable = value.(m[:p_gen][bus]["renewable"])
     prices = dual.(m[:load_balance]) / dt
-    terminal_value = inputs.net_soc_bid[battery][T] * (soc[end] - value(m[:soc][bus][battery][0]))
-    profit = dt * sum((discharge .- charge) .* prices)
-    degradation = dt * sum(inputs.charging_cost[battery] .* charge + inputs.discharging_cost[battery] .* discharge)
+    battery_data = Dict(name => begin
+        charge = value.(m[:p_charge][bus][name])
+        discharge = value.(m[:p_discharge][bus][name])
+        soc = [value(m[:soc][bus][name][t]) for t in 1:T]
+        terminal_value = inputs.net_soc_bid[name][T] * (soc[end] - value(m[:soc][bus][name][0]))
+        profit = dt * sum((discharge .- charge) .* prices)
+        degradation = dt * sum(inputs.charging_cost[name] .* charge + inputs.discharging_cost[name] .* discharge)
+        (; charge, discharge, soc, terminal_value, profit,
+            surplus = profit - degradation + terminal_value)
+    end for name in batteries)
+    charge = sum(battery_data[name].charge for name in batteries)
+    discharge = sum(battery_data[name].discharge for name in batteries)
+    soc = sum(battery_data[name].soc for name in batteries)
+    terminal_value = sum(battery_data[name].terminal_value for name in batteries)
+    profit = sum(battery_data[name].profit for name in batteries)
+    surplus = sum(battery_data[name].surplus for name in batteries)
     return (
+        battery_data = battery_data,
         data = (
             Time = collect(1:T),
             Thermal = round.(thermal; digits = 2),
@@ -132,7 +143,7 @@ function collect_results(inputs::BIMInputs, m::JuMP.AbstractModel, net)
             Price = round.(prices; digits = 2),
         ),
         objective_value = round(objective_value(m); digits = 2),
-        ess_surplus = round(profit - degradation + terminal_value; digits = 2),
+        ess_surplus = round(surplus; digits = 2),
         ess_profit = round(profit; digits = 2),
         cost_to_serve = round(dt * sum((thermal .+ renewable .+ discharge .- charge) .* prices); digits = 2),
         # Preserve the experiment's thermal-payment-minus-terminal-value definition.

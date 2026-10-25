@@ -57,25 +57,50 @@ function run_single_bid(;
         results = collect_results(sample_inputs, m, net)
         isnothing(results) && error("Could not collect single-bid results for b=$(b)")
 
-        data = DataFrame(results.data)
-        data.b .= Float64(b)
-        for metric in (:objective_value, :ess_surplus, :ess_profit, :cost_to_serve, :actual_cost)
-            data[!, metric] .= getproperty(results, metric)
-        end
         output_csv = joinpath(
             output_dir,
             "singlebid_results_$(inputs.experiment_name)_b$(b).csv",
         )
         mkpath(dirname(output_csv))
-        CSV.write(output_csv, data)
+        open(output_csv, "w") do io
+            println(io, ESSModels.EXPERIMENT_HEADER * ",b")
+            buffer = IOBuffer()
+            ESSModels.write_battery_rows(buffer, 1, sample_inputs, results, net)
+            for row in split(chomp(String(take!(buffer))), '\n')
+                println(io, row, ",", Float64(b))
+            end
+        end
         push!(paths, output_csv)
         println("Wrote single-bid results to: $(output_csv)")
     end
     return paths
 end
 
+# Run from the code directory:
 # julia --project=. --threads=1 -p 6 run_experiments.jl
-# run_base()
-# run_uniform_error_multibid(bid_perfect_foresight = true)
-run_uniform_error_multibid(bid_perfect_foresight = false)
-# run_single_bid(b_values = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0])
+if abspath(PROGRAM_FILE) == @__FILE__
+    # Select the network and its matching inputs here.
+    # For one battery, use inputs_base and BASE_NETWORK_PATH instead.
+    inputs = inputs_base #inputs_multiple_ess
+    network_file_path = BASE_NETWORK_PATH #MULTIPLE_ESS_NETWORK_PATH
+
+    # Use (false,) for standard bids only, (true,) for buy foresight only,
+    # or (false, true) for both. The same seed gives both runs the same errors.
+    for bid_perfect_foresight in (false)
+        run_uniform_error_multibid(;
+            inputs = inputs,
+            network_file_path = network_file_path,
+            bid_perfect_foresight = bid_perfect_foresight,
+            n_samples = 10_000,  # use 100 for a quick run
+            error_range = 20.0,
+            seed = 42,
+            b = 0.0,
+        )
+    end
+
+    run_single_bid(;
+        inputs = inputs,
+        network_file_path = network_file_path,
+        b_values = [0, 5, 10, 15, 20, 25, 30, 35, 40.0, 45, 50],  # terminal SOC bids for the comparison runs
+    )
+end

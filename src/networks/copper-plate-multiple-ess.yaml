@@ -23,19 +23,19 @@ Generator:
 Battery:
   - bus: b1
     name: battery1
-    pmax: 200.0
-    pmin: -200.0
+    pmax: 100.0
+    pmin: -100.0
     charge_efficiency: 0.9
     discharge_efficiency: 0.9
-    soc_max: 800.0
+    soc_max: 400.0
     soc_min: 0.0
     soc_init: 0.0
   - bus: b1
     name: battery2
-    pmax: 200.0
-    pmin: -200.0
+    pmax: 100.0
+    pmin: -100.0
     charge_efficiency: 0.9
     discharge_efficiency: 0.9
-    soc_max: 800.0
+    soc_max: 400.0
     soc_min: 0.0
     soc_init: 0.0

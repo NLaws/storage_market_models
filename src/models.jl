@@ -311,12 +311,34 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
 end
 
 
+"""Load all named batteries, including multiple batteries attached to one bus.
+
+The installed CommonOPF loader overwrites repeated Battery bus attributes.
+Load one per bus first, then attach the complete vectors locally.
+"""
+function load_bim_network(network_file_path::AbstractString)
+    specs = CPF.load_yaml(String(network_file_path))
+    batteries = CPF.build_busses(get(specs, :Battery, []), CPF.Battery)
+    names = [battery.name for battery in batteries]
+    all(name -> !ismissing(name), names) && allunique(names) ||
+        throw(ArgumentError("Batteries must have unique names"))
+    if haskey(specs, :Battery)
+        specs[:Battery] = unique(battery -> battery[:bus], specs[:Battery])
+    end
+    net = CPF.Network(specs)
+    for bus in unique([battery.bus for battery in batteries])
+        net[bus][:Battery] = filter(battery -> battery.bus == bus, batteries)
+    end
+    return net
+end
+
+
 function build_bim_single_bid(
         inputs::BIMInputs,
         network_file_path::AbstractString = BASE_NETWORK_PATH;
         silent::Bool = false,
     )
-    net = CPF.Network(network_file_path)
+    net = load_bim_network(network_file_path)
     m = JuMP.Model(HiGHS.Optimizer)
     silent && set_silent(m)
     set_attribute(m, JuMP.MOI.NumberOfThreads(), 1)
@@ -363,7 +385,7 @@ function build_bim_multi_bid(
         network_file_path::AbstractString = BASE_NETWORK_PATH;
         silent::Bool = false,
     )
-    net = CPF.Network(network_file_path)
+    net = load_bim_network(network_file_path)
     m = JuMP.Model(HiGHS.Optimizer)
     silent && set_silent(m)
     set_attribute(m, JuMP.MOI.NumberOfThreads(), 1)

@@ -69,3 +69,16 @@ inputs_base = BIMInputs(
     ess_offers = Dict("battery" => [43.1, 50.0, 0.0, 0.0, 49.9, 49.9]),
     net_soc_bid = Dict("battery" => fill(40.0, 6)),
 )
+
+const MULTIPLE_ESS_NETWORK_PATH = joinpath(@__DIR__, "networks", "copper-plate-multiple-ess.yaml")
+
+# Independent copies allow each battery's bids and costs to be edited separately.
+inputs_multiple_ess = BIMInputs(
+    experiment_name = "multiple_ess",
+    offer_prices = deepcopy(inputs_base.offer_prices),
+    charging_cost = Dict(name => copy(inputs_base.charging_cost["battery"]) for name in ("battery1", "battery2")),
+    discharging_cost = Dict(name => copy(inputs_base.discharging_cost["battery"]) for name in ("battery1", "battery2")),
+    ess_bids = Dict(name => copy(inputs_base.ess_bids["battery"]) for name in ("battery1", "battery2")),
+    ess_offers = Dict(name => copy(inputs_base.ess_offers["battery"]) for name in ("battery1", "battery2")),
+    net_soc_bid = Dict(name => copy(inputs_base.net_soc_bid["battery"]) for name in ("battery1", "battery2")),
+)

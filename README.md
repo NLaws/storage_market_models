@@ -1,47 +1,67 @@
-
-```sh
-julia1.11 --project=. run_me.jl
-```
-
-Run the unit tests from this directory:
+Run the tests from the `code` directory:
 
 ```sh
 julia --project=. test/runtests.jl
 ```
 
-The experiment base case is `inputs_base::BIMInputs`. Network demand, generator limits,
-and storage limits come from `src/networks/base-single-ess.yaml`; price and cost
-vectors come from `src/inputs.jl`. Use `replace_inputs(inputs_base; b = 60.0)` to
-change the terminal SOC bid without mutating the base case.
-
-Generate the plotting inputs in parallel from this directory:
+Run the two-battery copper-plate experiment and generate its single-bid comparison:
 
 ```sh
 julia --project=. --threads=1 -p 6 run_experiments.jl
 ```
 
-Like `run_me.jl`, `run_experiments.jl` runs `run_base()` by default and exposes
-four commented calls for noisy offers and uniform errors, each with or without
-perfect foresight. Uncomment the desired calls to run experiments. The experiment
-functions accept `n_samples` (10,000 by default; use 100 for a quick run).
-The `run_noisy_offer_sweep` and `run_plot_experiments` helpers remain available
-for per-b sweeps and generating all notebook inputs, respectively.
-`-p 6` starts six worker
-processes, and samples are distributed across those workers.
+Edit the function calls at the bottom of `run_experiments.jl` to choose inputs,
+network, `n_samples`, `error_range`, `seed`, and `b`. Set `b_values` in the
+`run_single_bid` call to choose the comparison terminal SOC bid(s).
+The selected inputs and network default to the two-battery scenario.
 
-Results are written to `outputs/bim`. Once the selected runs finish, restart the
-Julia kernel and run `notebooks/plot_experiments.ipynb` to load the CSVs and save
-plots in `figures/bim`. Running the whole notebook requires all experiment CSVs;
-individual runs refresh only their corresponding files.
+The `bid_perfect_foresight` loop uses `(false, true)` to generate both runs with
+the same errors. Change it to `(false,)` or `(true,)` to run only one mode.
+Use `n_samples = 100` for a quick run. `-p 6` starts six sample workers.
+The single-bid comparison runs after the multibid experiments.
 
-The experiment runners use `build_bim_single_bid` and `build_bim_multi_bid` and
-accept a `network_file_path` keyword. The existing CSV layout supports one battery
-on a copper plate with generators named `thermal` and `renewable`. BIM multi-bid
-excludes degradation costs from its objective and uses binary operating modes to
-prevent simultaneous charging and discharging. Prices come from an LP re-solve
-with those modes fixed at their optimal values. Reported ESS surplus still
-subtracts degradation costs for comparison with the single-bid reference. The old `Inputs` base case remains available
-as `legacy_inputs_base` for `check_duals.jl` and the original model builders.
+`inputs_multiple_ess` in `src/inputs.jl` supplies independent bid/cost vectors for
+`battery1` and `battery2` in `src/networks/copper-plate-multiple-ess.yaml`. Edit
+those dictionaries to vary bids or degradation costs by battery. `inputs_base`
+uses `src/networks/base-single-ess.yaml`. Both scenarios use six four-hour periods.
+`replace_inputs(inputs; b = 60.0)` copies inputs while changing terminal SOC bids.
+
+Every sample, battery, and time interval receives its own independent
+`Uniform(-error_range, error_range)` draw. Discharge offers equal the single-bid
+reference clearing price plus that error, clamped at zero. Charging bids remain
+as configured unless buy foresight is enabled, which sets each battery's bids to
+zero wherever its own reference charging dispatch is positive.
+
+Results go to `outputs/bim`, with scenario, bids, sample count, and error range in
+filenames. Repeating those settings overwrites those files (including when only
+the seed changes). Each CSV has one row per sample/battery/time. `charge`,
+`discharge`, `soc`, `noise`, `ess_offer`, `ess_bid`, `battery_surplus`, and
+`battery_profit` describe that battery. `ess_surplus` and `ess_profit` describe
+the fleet; `price`, `demand`, `thermal`, `renewable`, and system monetary metrics
+repeat across batteries. Count system metrics once per sample, rather than
+summing them over battery rows. Single-bid files use the same layout plus `b`.
+
+In `notebooks/plot_experiments.ipynb`, set the configuration cell to the same
+`scenario`, `n_samples`, `error_range`, and `b`. The notebook automatically discovers
+all available `singlebid_results_<scenario>_b*.csv` files, sorts terminal bids
+numerically, and plots every reference separately with a labeled color. Set `battery_view =
+nothing` for fleet dispatch/SOC/surplus or `"battery1"` / `"battery2"` to inspect one
+battery. Set `plot_column` in the diagnostic plot cell to `:ess_offer`, `:noise`, `:soc`,
+`:discharge`, or another numeric interval column. Prices and costs always describe the system. Fleet bid/offer/noise
+columns are arithmetic means; raw battery rows remain available in
+`multi_uniform_battery_df`. The notebook automatically finds the optional
+buy-foresight file and writes figures under a configuration-specific directory
+in `figures/bim`. Restart the kernel and run from the top after changing settings.
+Legacy single-battery CSVs can still be loaded with `battery_view = nothing`.
+
+The local network loader preserves all batteries sharing a bus, working around
+the installed CommonOPF loader's replacement of repeated battery attributes.
+
+The runners support copper-plate networks with generators named `thermal` and
+`renewable`. BIM multibid excludes degradation costs from its objective and uses
+binary modes to prevent simultaneous charging/discharging. Prices are LP duals
+after fixing optimal modes. Reported surplus subtracts degradation costs. The
+legacy `Inputs` case remains available as `legacy_inputs_base` for `check_duals.jl`.
 
 # Definitions
 - $x_t$ thermal dispatch

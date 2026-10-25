@@ -5,6 +5,7 @@
     discharging_cost = 1.0
     terminal_soc_bid = 40.0
     inputs = ESSModels.BIMInputs(
+        experiment_name = "test",
         offer_prices = Dict("thermal" => fill(50.0, 6), "renewable" => zeros(6)),
         charging_cost = Dict("battery" => fill(charging_cost, 6)),
         discharging_cost = Dict("battery" => fill(discharging_cost, 6)),
@@ -91,6 +92,7 @@ end
                 soc_init: 0.0
             """)
             inputs = ESSModels.BIMInputs(
+                experiment_name = "test",
                 offer_prices = Dict("thermal" => fill(50.0, 2), "renewable" => zeros(2)),
                 charging_cost = Dict(name => ones(2)),
                 discharging_cost = Dict(name => ones(2)),
