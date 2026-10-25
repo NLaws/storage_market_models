@@ -49,6 +49,7 @@ legacy_inputs_base = Inputs(;
 
 
 Base.@kwdef mutable struct BIMInputs
+    experiment_name::AbstractString
     offer_prices::Dict{String, Vector{Float64}}
     charging_cost::Dict{String, Vector{Float64}}
     discharging_cost::Dict{String, Vector{Float64}}
@@ -60,6 +61,7 @@ end
 const BASE_NETWORK_PATH = joinpath(@__DIR__, "networks", "base-single-ess.yaml")
 
 inputs_base = BIMInputs(
+    experiment_name = "base",
     offer_prices = Dict("thermal" => fill(50.0, 6), "renewable" => zeros(6)),
     charging_cost = Dict("battery" => ones(6)),
     discharging_cost = Dict("battery" => ones(6)),

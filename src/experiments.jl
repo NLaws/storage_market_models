@@ -6,12 +6,13 @@ end
 
 """Copy BIM bids/costs without mutating the base inputs. `b` sets terminal SOC bids."""
 function replace_inputs(
-    inputs::BIMInputs;
-    b::Union{Real, Nothing} = nothing,
-    ess_offers::AbstractDict = inputs.ess_offers,
-    ess_bids::AbstractDict = inputs.ess_bids,
-)::BIMInputs
+        inputs::BIMInputs;
+        b::Union{Real, Nothing} = nothing,
+        ess_offers::AbstractDict = inputs.ess_offers,
+        ess_bids::AbstractDict = inputs.ess_bids,
+    )::BIMInputs
     return BIMInputs(
+        experiment_name = inputs.experiment_name,
         offer_prices = deepcopy(inputs.offer_prices),
         charging_cost = deepcopy(inputs.charging_cost),
         discharging_cost = deepcopy(inputs.discharging_cost),
@@ -28,26 +29,26 @@ experiment_battery(inputs::BIMInputs) = only(keys(inputs.ess_bids))
 
 
 function write_results_row(
-    io,
-    sample::Int,
-    time::Int,
-    optimized_price,
-    noise,
-    ess_offer,
-    ess_bid,
-    demand::Float64,
-    thermal::Float64,
-    renewable::Float64,
-    charge::Float64,
-    discharge::Float64,
-    soc::Float64,
-    price::Float64,
-    objective_value::Float64,
-    ess_surplus::Float64,
-    ess_profit::Float64,
-    cost_to_serve::Float64,
-    actual_cost::Float64,
-)
+        io,
+        sample::Int,
+        time::Int,
+        optimized_price,
+        noise,
+        ess_offer,
+        ess_bid,
+        demand::Float64,
+        thermal::Float64,
+        renewable::Float64,
+        charge::Float64,
+        discharge::Float64,
+        soc::Float64,
+        price::Float64,
+        objective_value::Float64,
+        ess_surplus::Float64,
+        ess_profit::Float64,
+        cost_to_serve::Float64,
+        actual_cost::Float64,
+    )
     println(
         io,
         string(
@@ -92,11 +93,11 @@ end
 
 
 function log_sample_progress!(
-    progress::Base.RefValue{Int},
-    n_samples::Int,
-    label::AbstractString,
-    log_every::Int,
-)
+        progress::Base.RefValue{Int},
+        n_samples::Int,
+        label::AbstractString,
+        log_every::Int,
+    )
     log_every = max(log_every, 1)
     progress[] += 1
     completed = progress[]
@@ -189,7 +190,7 @@ function build_uniform_error_multibid_sample_rows(
             sample,
             t,
             round(optimized_prices[t], digits = 4),
-            round(noise, digits = 4),
+            round(noise[t], digits = 4),
             round(offers[t], digits = 4),
             round(sample_inputs.ess_bids[experiment_battery(inputs)][t], digits = 4),
             Float64(demand[t]),
@@ -222,12 +223,20 @@ end
         bid_perfect_foresight::Bool = true,
     )
 
-Runs the multibid experiment for a given set of inputs, adding uniformly distributed noise to the
-optimized prices from the single-bid reference. Writes results to
-a CSV file. 
+Solve the single-bid reference once, then run multibid samples with perturbed
+discharge offers and write their results to CSV. The reference minimizes generator
+and battery degradation costs minus terminal SOC value. Its optimal prices are
+load-balance duals divided by the interval length in hours, rounded to two decimals
+by `collect_results`.
 
-If `bid_perfect_foresight` is true, sets bids to zero in any time period where the
-optimal charge is greater than zero.
+Draw an independent `Uniform(-error_range, error_range)` error for every sample
+and time interval. Set each discharge offer to
+`max(optimized_prices[t] + noise[t], clamp_min)` and solve the multibid model.
+The CSV records each interval's reference price, error, offer, and clearing price.
+
+Charging bids remain `inputs.ess_bids` unless `bid_perfect_foresight` is true:
+then bids are zero wherever the reference's reported charge is positive, and the
+output filename gains `_bid_perfect_foresight`.
 """
 function run_uniform_error_multibid_experiment(
         inputs::BIMInputs;
@@ -253,7 +262,7 @@ function run_uniform_error_multibid_experiment(
         output_csv = replace(output_csv, ".csv" => "_bid_perfect_foresight.csv")
     end
 
-    noise_by_sample = uniform_samples(-error_range, error_range, n_samples)
+    noise_by_sample = [uniform_samples(-error_range, error_range, T) for _ in 1:n_samples]
     header = "sample,time,optimized_price,noise,ess_offer,ess_bid,demand,thermal,renewable,charge,discharge,soc,price,objective_value,ess_surplus,ess_profit,cost_to_serve,actual_cost"
 
     mkpath(dirname(output_csv))
