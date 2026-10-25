@@ -3,6 +3,12 @@
 julia1.11 --project=. run_me.jl
 ```
 
+Run the unit tests from this directory:
+
+```sh
+julia --project=. test/runtests.jl
+```
+
 # Definitions
 - $x_t$ thermal dispatch
 - $c_x$ thermal offers

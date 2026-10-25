@@ -46,3 +46,13 @@ inputs_base = Inputs(;
     ess_bids = [43.1, 50.0, 0.0, 0.0, 50.0, 40.0],
     ess_offers = [43.1, 50.0, 0.0, 0.0, 49.9, 49.9],
 )
+
+
+Base.@kwdef mutable struct BIMInputs
+    offer_prices::Dict{String, Vector{Float64}}
+    charging_cost::Dict{String, Vector{Float64}}
+    discharging_cost::Dict{String, Vector{Float64}}
+    ess_bids::Dict{String, Vector{Float64}}
+    ess_offers::Dict{String, Vector{Float64}}
+    net_soc_bid::Dict{String, Vector{Float64}}  # ESS willingness to pay for s[T]
+end

@@ -60,8 +60,8 @@ function run_uniform_error(;bid_perfect_foresight::Bool)
 end
 
 # julia --project=. -p 6 run_me.jl
-# run_base()
+run_base()
 # run_noisy_offers(bid_perfect_foresight = true)
 # run_uniform_error(bid_perfect_foresight = true)
-run_noisy_offers(bid_perfect_foresight = false)
+# run_noisy_offers(bid_perfect_foresight = false)
 # run_uniform_error(bid_perfect_foresight = false)

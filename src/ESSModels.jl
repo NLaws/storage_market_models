@@ -1,8 +1,11 @@
 module ESSModels
 
+using BusInjectionModel
 using HiGHS
 using JuMP
 using PrettyTables
+
+const CPF = BusInjectionModel.CommonOPF
 
 export
     Inputs,

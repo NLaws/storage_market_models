@@ -1,0 +1,32 @@
+Network:
+  substation_bus: b1
+  Sbase: 1
+  Ntimesteps: 6
+  time_steps_per_hour: 0.25
+
+Load:
+  - bus: b1
+    p1: [100.0, 200, 300, 300, 200, 100]
+
+Generator:
+  - bus: b1
+    name: renewable
+    p1: [200.0, 100, 500, 500, 25, 0]
+    pmax: 500.0
+    pmin: 0.0
+  - bus: b1
+    name: thermal
+    p1: [100.0, 100, 100, 100, 100, 100]
+    pmax: 100.0
+    pmin: 0.0
+
+Battery:
+  - bus: b1
+    name: battery
+    pmax: 200.0
+    pmin: -200.0
+    charge_efficiency: 0.9
+    discharge_efficiency: 0.9
+    soc_max: 800.0
+    soc_min: 0.0
+    soc_init: 0.0

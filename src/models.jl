@@ -309,3 +309,48 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
 
     return m
 end
+
+
+using BusInjectionModel, HiGHS, JuMP
+network_file_path = joinpath("networks", "base-single-ess.yaml")
+
+
+function build_copper_plate_single_bid_model(inputs::BIMInputs, network_file_path::String)
+    net = CPF.Network(network_file_path)
+    m = JuMP.Model(HiGHS.Optimizer)
+    build_bim_polar!(m, net, DC)
+
+
+    # perfect foresight bids and offers
+    # ess_bids = [43.1, 50.0, 0.0, 0.0, 50.0, 40.0]
+    # ess_offers = [43.1, 50.0, 0.0, 0.0, 49.9, 49.9]
+    # TODO use Inputs for these parameters, including future value
+    thermal_price = 50.0
+    renewable_price = 0.0
+    charging_cost = 1.0
+    discharging_cost = 1.0
+
+
+    @constraint(m, [t in 1:net.Ntimesteps], m[:p_gen]["b1"]["renewable"][t] <= net["b1"][:Generator][1].p1[t])
+
+    @objective(m, Min,
+        (1/net.time_steps_per_hour) * (
+            sum(m[:p_gen][b][gen][t] * inputs.offer_prices[gen][t]
+                for b in CPF.generator_busses(net)
+                for gen in keys(m[:p_gen][b])
+                for t in 1:net.Ntimesteps)
+            +
+            # degradation cost
+            sum(m[:p_charge]["b1"]["battery"][t] for t in 1:net.Ntimesteps) * charging_cost +
+            sum(m[:p_discharge]["b1"]["battery"][t] for t in 1:net.Ntimesteps) * discharging_cost
+        ) - 
+        # battery energy value
+        40 * (m[:soc]["b1"]["battery"][net.Ntimesteps] - m[:soc]["b1"]["battery"][0])
+        # m[:p_discharge]["b1"]["battery"][t] * ess_offers[t] -
+        # m[:p_charge]["b1"]["battery"][t]    * ess_bids[t]
+    )
+
+    optimize!(m)
+
+    return m, net
+end
