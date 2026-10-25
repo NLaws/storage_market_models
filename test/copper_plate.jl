@@ -53,3 +53,61 @@
     @test isapprox(soc[net.Ntimesteps], 0.0, atol = 1e-2)
     @test isapprox(objective_value(m), 25132.89, atol = 1e-2)
 end
+
+@testset "DC Copper Plate Multi Bid" begin
+    # Named batteries charge from free renewable energy, then displace thermal generation.
+    for (name, capacity) in (("small", 10.0), ("large", 20.0))
+        mktempdir() do dir
+            network_path = joinpath(dir, "multi-bid.yaml")
+            write(network_path, """
+            Network:
+              substation_bus: storage_bus
+              Sbase: 1
+              Ntimesteps: 2
+              time_steps_per_hour: 0.25
+            Load:
+              - bus: storage_bus
+                p1: [0.0, 100.0]
+            Generator:
+              - bus: storage_bus
+                name: renewable
+                p1: [100.0, 0.0]
+                pmax: 100.0
+                pmin: 0.0
+              - bus: storage_bus
+                name: thermal
+                p1: [100.0, 100.0]
+                pmax: 100.0
+                pmin: 0.0
+            Battery:
+              - bus: storage_bus
+                name: $name
+                pmax: $capacity
+                pmin: $(-capacity)
+                charge_efficiency: 1.0
+                discharge_efficiency: 1.0
+                soc_max: $(4 * capacity)
+                soc_min: 0.0
+                soc_init: 0.0
+            """)
+            inputs = ESSModels.BIMInputs(
+                offer_prices = Dict("thermal" => fill(50.0, 2), "renewable" => zeros(2)),
+                charging_cost = Dict(name => ones(2)),
+                discharging_cost = Dict(name => ones(2)),
+                ess_bids = Dict(name => [10.0, 0.0]),
+                ess_offers = Dict(name => [100.0, 20.0]),
+                net_soc_bid = Dict(name => zeros(2)),
+            )
+            m, net = ESSModels.build_copper_plate_multi_bid_model(inputs, network_path)
+
+            @test termination_status(m) == JuMP.OPTIMAL
+            @test isapprox(value.(m[:p_charge]["storage_bus"][name]), [capacity, 0.0], atol = 1e-6)
+            @test isapprox(value.(m[:p_discharge]["storage_bus"][name]), [0.0, capacity], atol = 1e-6)
+            @test isapprox(value(m[:soc]["storage_bus"][name][net.Ntimesteps]), 0.0, atol = 1e-6)
+            @test isapprox(value.(m[:p_gen]["storage_bus"]["thermal"]), [0.0, 100.0 - capacity], atol = 1e-6)
+            # Four-hour intervals: thermal + degradation + discharge offers - charging bids.
+            expected_cost = 4 * (50 * (100 - capacity) + 2 * capacity + 20 * capacity - 10 * capacity)
+            @test isapprox(objective_value(m), expected_cost, atol = 1e-6)
+        end
+    end
+end

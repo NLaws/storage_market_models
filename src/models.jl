@@ -311,19 +311,11 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
 end
 
 
-using BusInjectionModel, HiGHS, JuMP
-network_file_path = joinpath("networks", "base-single-ess.yaml")
-
-
 function build_copper_plate_single_bid_model(inputs::BIMInputs, network_file_path::String)
     net = CPF.Network(network_file_path)
     m = JuMP.Model(HiGHS.Optimizer)
     build_bim_polar!(m, net, DC)
-
-
-    # perfect foresight bids and offers
-    # ess_bids = [43.1, 50.0, 0.0, 0.0, 50.0, 40.0]
-    # ess_offers = [43.1, 50.0, 0.0, 0.0, 49.9, 49.9]
+    # this builder can be used for models with lines too? (rm copper plate from the name)
 
     # renewable limits (applied to all generators -> put pmax in p1 for thermal generators)
     @constraint(m, [b in CPF.generator_busses(net), gen in net[b][:Generator], t in 1:net.Ntimesteps], 
@@ -352,8 +344,50 @@ function build_copper_plate_single_bid_model(inputs::BIMInputs, network_file_pat
             (m[:soc][b][batt][net.Ntimesteps] - m[:soc][b][batt][0])
             for b in CPF.battery_busses(net)
             for batt in keys(m[:soc][b]))
-        # m[:p_discharge]["b1"]["battery"][t] * ess_offers[t] -
-        # m[:p_charge]["b1"]["battery"][t]    * ess_bids[t]
+    )
+
+    optimize!(m)
+
+    return m, net
+end
+
+
+
+function build_copper_plate_multi_bid_model(inputs::BIMInputs, network_file_path::String)
+    net = CPF.Network(network_file_path)
+    m = JuMP.Model(HiGHS.Optimizer)
+    build_bim_polar!(m, net, DC)
+
+    # renewable limits (applied to all generators -> put pmax in p1 for thermal generators)
+    @constraint(m, [b in CPF.generator_busses(net), gen in net[b][:Generator], t in 1:net.Ntimesteps], 
+        m[:p_gen][b][gen.name][t] <= gen.p1[t]
+    )
+
+    @objective(m, Min,
+        (1/net.time_steps_per_hour) * (
+            sum(m[:p_gen][b][gen][t] * inputs.offer_prices[gen][t]
+                for b in CPF.generator_busses(net)
+                for gen in keys(m[:p_gen][b])
+                for t in 1:net.Ntimesteps)
+            +
+            # degradation cost
+            sum(m[:p_charge][b][batt][t] * inputs.charging_cost[batt][t]
+                for b in CPF.battery_busses(net)
+                for batt in keys(m[:p_charge][b])
+                for t in 1:net.Ntimesteps) +
+            sum(m[:p_discharge][b][batt][t] * inputs.discharging_cost[batt][t]
+                for b in CPF.battery_busses(net)
+                for batt in keys(m[:p_discharge][b])
+                for t in 1:net.Ntimesteps)
+            + sum(m[:p_discharge][b][batt][t] * inputs.ess_offers[batt][t]
+                for b in CPF.battery_busses(net)
+                for batt in keys(m[:p_discharge][b])
+                for t in 1:net.Ntimesteps)
+            - sum(m[:p_charge][b][batt][t] * inputs.ess_bids[batt][t]
+                for b in CPF.battery_busses(net)
+                for batt in keys(m[:p_charge][b])
+                for t in 1:net.Ntimesteps)
+        )
     )
 
     optimize!(m)
