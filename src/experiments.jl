@@ -1,7 +1,3 @@
-using Random
-using Distributed
-
-
 function uniform_samples(xmin, xmax, N)
     xmin <= xmax || throw(ArgumentError("xmin must be <= xmax"))
     return xmin .+ (xmax - xmin) .* rand(N)
@@ -38,6 +34,29 @@ function replace_inputs(
         ess_offers = ess_offers,
     )
 end
+
+
+"""Copy BIM bids/costs without mutating the base inputs. `b` sets terminal SOC bids."""
+function replace_inputs(
+    inputs::BIMInputs;
+    b::Union{Real, Nothing} = nothing,
+    ess_offers::AbstractDict = inputs.ess_offers,
+    ess_bids::AbstractDict = inputs.ess_bids,
+)::BIMInputs
+    return BIMInputs(
+        offer_prices = deepcopy(inputs.offer_prices),
+        charging_cost = deepcopy(inputs.charging_cost),
+        discharging_cost = deepcopy(inputs.discharging_cost),
+        ess_offers = deepcopy(ess_offers),
+        ess_bids = deepcopy(ess_bids),
+        net_soc_bid = isnothing(b) ? deepcopy(inputs.net_soc_bid) :
+            Dict(name => fill(Float64(b), length(values)) for (name, values) in inputs.net_soc_bid),
+    )
+end
+
+
+# The existing CSV format describes one battery on a copper plate.
+experiment_battery(inputs::BIMInputs) = only(keys(inputs.ess_bids))
 
 
 function write_results_row(
@@ -87,13 +106,6 @@ function write_results_row(
 end
 
 
-function configure_experiment_model!(m)
-    set_silent(m)
-    set_attribute(m, JuMP.MOI.NumberOfThreads(), 1)
-    return m
-end
-
-
 function assert_sample_has_solution(m, sample::Int, label::AbstractString)
     result_count = JuMP.result_count(m)
     if result_count == 0
@@ -135,7 +147,7 @@ function map_samples(
         log_every::Int = 250,
     )
     n_samples = length(samples)
-    if nworkers() == 0
+    if nprocs() == 1
         progress = Ref(0)
         return map(samples) do sample
             result = f(sample)
@@ -181,28 +193,27 @@ end
 
 function build_uniform_error_multibid_sample_rows(
         sample::Int,
-        inputs::Inputs,
+        inputs::BIMInputs,
         bids,
         optimized_prices,
         noise_by_sample,
         clamp_min::Float64,
         T::Int,
+        network_file_path::AbstractString,
     )
     noise = noise_by_sample[sample]
     offers = max.(optimized_prices .+ noise, clamp_min)
     sample_inputs = replace_inputs(
         inputs;
-        ess_offers = offers,
-        ess_bids = bids,
+        ess_offers = Dict(experiment_battery(inputs) => offers),
+        ess_bids = Dict(experiment_battery(inputs) => bids),
     )
-    m = build_multi_bid_model(sample_inputs)
-    configure_experiment_model!(m)
-
-    optimize!(m)
+    m, net = build_bim_multi_bid(sample_inputs, network_file_path; silent = true)
     assert_sample_has_solution(m, sample, "uniform_error_multibid")
-    results = collect_results(sample_inputs, m)
+    results = collect_results(sample_inputs, m, net)
     isnothing(results) && return nothing
 
+    demand = CPF.total_load_p(net)
     io = IOBuffer()
     for t in 1:T
         write_results_row(
@@ -212,8 +223,8 @@ function build_uniform_error_multibid_sample_rows(
             round(optimized_prices[t], digits = 4),
             round(noise, digits = 4),
             round(offers[t], digits = 4),
-            round(sample_inputs.ess_bids[t], digits = 4),
-            sample_inputs.demand[t],
+            round(sample_inputs.ess_bids[experiment_battery(inputs)][t], digits = 4),
+            Float64(demand[t]),
             results.data.Thermal[t],
             results.data.Renewable[t],
             results.data.Charge[t],
@@ -233,29 +244,27 @@ end
 
 function build_noisy_offer_multibid_sample_rows(
         sample::Int,
-        inputs::Inputs,
+        inputs::BIMInputs,
         bids,
         optimized_prices,
         noise_by_sample,
         clamp_min::Float64,
         T::Int,
+        network_file_path::AbstractString,
     )
     noise = noise_by_sample[sample]
     offers = max.(optimized_prices .+ noise, clamp_min)
     sample_inputs = replace_inputs(
         inputs;
-        b = inputs.b,  # Match the single-bid reference and its result calculations.
-        ess_offers = offers,
-        ess_bids = bids,
+        ess_offers = Dict(experiment_battery(inputs) => offers),
+        ess_bids = Dict(experiment_battery(inputs) => bids),
     )
-    m = build_multi_bid_model(sample_inputs)
-    configure_experiment_model!(m)
-
-    optimize!(m)
+    m, net = build_bim_multi_bid(sample_inputs, network_file_path; silent = true)
     assert_sample_has_solution(m, sample, "noisy_offer_multibid")
-    results = collect_results(sample_inputs, m)
+    results = collect_results(sample_inputs, m, net)
     isnothing(results) && return nothing
 
+    demand = CPF.total_load_p(net)
     io = IOBuffer()
     for t in 1:T
         write_results_row(
@@ -265,8 +274,8 @@ function build_noisy_offer_multibid_sample_rows(
             round(optimized_prices[t], digits = 4),
             round(noise[t], digits = 4),
             round(offers[t], digits = 4),
-            round(sample_inputs.ess_bids[t], digits = 4),
-            sample_inputs.demand[t],
+            round(sample_inputs.ess_bids[experiment_battery(inputs)][t], digits = 4),
+            Float64(demand[t]),
             results.data.Thermal[t],
             results.data.Renewable[t],
             results.data.Charge[t],
@@ -284,9 +293,10 @@ function build_noisy_offer_multibid_sample_rows(
 end
 
 
-function build_noisy_offer_singlebid_sample_rows(inputs::Inputs, results, T::Int)
+function build_noisy_offer_singlebid_sample_rows(inputs::BIMInputs, results, net, T::Int)
     sample = 1
     sample_inputs = inputs
+    demand = CPF.total_load_p(net)
     io = IOBuffer()
     for t in 1:T
         write_results_row(
@@ -295,9 +305,9 @@ function build_noisy_offer_singlebid_sample_rows(inputs::Inputs, results, T::Int
             t,
             "NaN",
             "NaN",
-            sample_inputs.b,
-            round(sample_inputs.b, digits = 4),
-            sample_inputs.demand[t],
+            sample_inputs.net_soc_bid[experiment_battery(inputs)][end],
+            round(sample_inputs.net_soc_bid[experiment_battery(inputs)][end], digits = 4),
+            Float64(demand[t]),
             results.data.Thermal[t],
             results.data.Renewable[t],
             results.data.Charge[t],
@@ -317,7 +327,8 @@ end
 
 """
     run_uniform_error_multibid_experiment(
-        inputs::Inputs;
+        inputs::BIMInputs;
+        network_file_path::AbstractString = BASE_NETWORK_PATH,
         n_samples::Int = 100,
         error_range::Float64 = 10.0,
         clamp_min::Float64 = 0.0,
@@ -326,14 +337,15 @@ end
     )
 
 Runs the multibid experiment for a given set of inputs, adding uniformly distributed noise to the
-optimized prices and varying the willingness to pay for the single-bid experiment. Writes results to
+optimized prices from the single-bid reference. Writes results to
 a CSV file. 
 
 If `bid_perfect_foresight` is true, sets bids to zero in any time period where the
 optimal charge is greater than zero.
 """
 function run_uniform_error_multibid_experiment(
-        inputs::Inputs;
+        inputs::BIMInputs;
+        network_file_path::AbstractString = BASE_NETWORK_PATH,
         n_samples::Int = 100,
         error_range::Float64 = 10.0,
         clamp_min::Float64 = 0.0,
@@ -342,18 +354,16 @@ function run_uniform_error_multibid_experiment(
         show_progress::Bool = true,
         log_every::Int = 250,
     )
-    single_model = build_single_bid_model(inputs)
-    configure_experiment_model!(single_model)
+    single_model, net = build_bim_single_bid(inputs, network_file_path; silent = true)
+    assert_sample_has_solution(single_model, 1, "single_bid_reference")
 
-    optimize!(single_model)
-
-    T = length(inputs.demand)
-    optimal_results = collect_results(inputs, single_model)
+    T = net.Ntimesteps
+    optimal_results = collect_results(inputs, single_model, net)
     optimized_prices = optimal_results.data.Price
 
-    bids = inputs.ess_bids
+    bids = inputs.ess_bids[experiment_battery(inputs)]
     if bid_perfect_foresight
-        bids = ifelse.(optimal_results.data.Charge .> 0, 0, inputs.ess_bids)
+        bids = ifelse.(optimal_results.data.Charge .> 0, 0.0, inputs.ess_bids[experiment_battery(inputs)])
         output_csv = replace(output_csv, ".csv" => "_bid_perfect_foresight.csv")
     end
 
@@ -370,6 +380,7 @@ function run_uniform_error_multibid_experiment(
             noise_by_sample,
             clamp_min,
             T,
+            network_file_path,
         ),
         1:n_samples,
         "uniform_error_multibid";
@@ -394,7 +405,8 @@ end
 
 """
     run_noisy_offer_experiment(
-        inputs::Inputs;
+        inputs::BIMInputs;
+        network_file_path::AbstractString = BASE_NETWORK_PATH,
         n_samples::Int = 100,
         sigma::Float64 = 5.0,
         seed::Int = 1,
@@ -405,7 +417,7 @@ end
     )
 
 Runs single-bid once with the provided inputs, then adds normally distributed noise to its
-optimized prices for the multibid samples. Both use inputs.b, including result calculations.
+optimized prices for the multibid samples. Both use inputs.net_soc_bid, including result calculations.
 Writes separate CSVs with the same columns: single-bid has one sample (sample = 1), with
 one row per timestep; multibid has n_samples samples, each with one row per timestep.
 
@@ -413,7 +425,8 @@ If `bid_perfect_foresight` is true, sets bids to zero in any time period where t
 greater than zero for the multibid experiment. The single-bid reference uses the provided inputs.
 """
 function run_noisy_offer_experiment(
-        inputs::Inputs;
+        inputs::BIMInputs;
+        network_file_path::AbstractString = BASE_NETWORK_PATH,
         n_samples::Int = 100,
         sigma::Float64 = 5.0,
         seed::Int = 1,
@@ -424,18 +437,16 @@ function run_noisy_offer_experiment(
         show_progress::Bool = true,
         log_every::Int = 50,
     )
-    single_model = build_single_bid_model(inputs)
-    configure_experiment_model!(single_model)
+    single_model, net = build_bim_single_bid(inputs, network_file_path; silent = true)
+    assert_sample_has_solution(single_model, 1, "single_bid_reference")
 
-    optimize!(single_model)
-
-    T = length(inputs.demand)
-    optimal_results = collect_results(inputs, single_model)
+    T = net.Ntimesteps
+    optimal_results = collect_results(inputs, single_model, net)
     optimized_prices = optimal_results.data.Price
 
-    bids = inputs.ess_bids
+    bids = inputs.ess_bids[experiment_battery(inputs)]
     if bid_perfect_foresight
-        bids = ifelse.(optimal_results.data.Charge .> 0, 0, inputs.ess_bids)
+        bids = ifelse.(optimal_results.data.Charge .> 0, 0.0, inputs.ess_bids[experiment_battery(inputs)])
         multi_output_csv = replace(multi_output_csv, ".csv" => "_bid_perfect_foresight.csv")
         single_output_csv = replace(single_output_csv, ".csv" => "_bid_perfect_foresight.csv")
     end
@@ -455,6 +466,7 @@ function run_noisy_offer_experiment(
             noise_by_sample,
             clamp_min,
             T,
+            network_file_path,
         ),
         1:n_samples,
         "noisy_offer_multibid";
@@ -472,7 +484,7 @@ function run_noisy_offer_experiment(
     end
 
     # Reuse the single-bid reference solve above without changing any inputs.
-    single_rows = build_noisy_offer_singlebid_sample_rows(inputs, optimal_results, T)
+    single_rows = build_noisy_offer_singlebid_sample_rows(inputs, optimal_results, net, T)
     open(single_output_csv, "w") do io
         println(io, header)
         print(io, single_rows)

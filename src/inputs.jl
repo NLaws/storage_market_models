@@ -22,7 +22,7 @@ Base.@kwdef mutable struct Inputs
     ess_offers::Vector{Float64}
 end
 
-inputs_base = Inputs(;
+legacy_inputs_base = Inputs(;
     demand =             [100.0, 200, 300, 300, 200, 100],
     renewable_capacity = [200.0, 100, 500, 500, 25,  0],
     renewable_offer_price = 0.0,
@@ -56,3 +56,14 @@ Base.@kwdef mutable struct BIMInputs
     ess_offers::Dict{String, Vector{Float64}}
     net_soc_bid::Dict{String, Vector{Float64}}  # ESS willingness to pay for s[T]
 end
+
+const BASE_NETWORK_PATH = joinpath(@__DIR__, "networks", "base-single-ess.yaml")
+
+inputs_base = BIMInputs(
+    offer_prices = Dict("thermal" => fill(50.0, 6), "renewable" => zeros(6)),
+    charging_cost = Dict("battery" => ones(6)),
+    discharging_cost = Dict("battery" => ones(6)),
+    ess_bids = Dict("battery" => [43.1, 50.0, 0.0, 0.0, 50.0, 40.0]),
+    ess_offers = Dict("battery" => [43.1, 50.0, 0.0, 0.0, 49.9, 49.9]),
+    net_soc_bid = Dict("battery" => fill(40.0, 6)),
+)

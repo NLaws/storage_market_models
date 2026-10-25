@@ -311,11 +311,16 @@ function build_multi_bid_model(inputs::Inputs)::JuMP.AbstractModel
 end
 
 
-function build_copper_plate_single_bid_model(inputs::BIMInputs, network_file_path::String)
+function build_bim_single_bid(
+        inputs::BIMInputs,
+        network_file_path::AbstractString = BASE_NETWORK_PATH;
+        silent::Bool = false,
+    )
     net = CPF.Network(network_file_path)
     m = JuMP.Model(HiGHS.Optimizer)
+    silent && set_silent(m)
+    set_attribute(m, JuMP.MOI.NumberOfThreads(), 1)
     build_bim_polar!(m, net, DC)
-    # this builder can be used for models with lines too? (rm copper plate from the name)
 
     # renewable limits (applied to all generators -> put pmax in p1 for thermal generators)
     @constraint(m, [b in CPF.generator_busses(net), gen in net[b][:Generator], t in 1:net.Ntimesteps], 
@@ -353,9 +358,15 @@ end
 
 
 
-function build_copper_plate_multi_bid_model(inputs::BIMInputs, network_file_path::String)
+function build_bim_multi_bid(
+        inputs::BIMInputs,
+        network_file_path::AbstractString = BASE_NETWORK_PATH;
+        silent::Bool = false,
+    )
     net = CPF.Network(network_file_path)
     m = JuMP.Model(HiGHS.Optimizer)
+    silent && set_silent(m)
+    set_attribute(m, JuMP.MOI.NumberOfThreads(), 1)
     build_bim_polar!(m, net, DC)
 
     # renewable limits (applied to all generators -> put pmax in p1 for thermal generators)
@@ -363,21 +374,20 @@ function build_copper_plate_multi_bid_model(inputs::BIMInputs, network_file_path
         m[:p_gen][b][gen.name][t] <= gen.p1[t]
     )
 
+    # One operating mode per battery and timestep: charge or discharge.
+    @variable(m, z[b in CPF.battery_busses(net), batt in keys(m[:p_charge][b]), t in 1:net.Ntimesteps], Bin)
+    for b in CPF.battery_busses(net), batt in keys(m[:p_charge][b]), t in 1:net.Ntimesteps
+        charge = m[:p_charge][b][batt][t]
+        discharge = m[:p_discharge][b][batt][t]
+        @constraint(m, charge <= upper_bound(charge) * z[b, batt, t])
+        @constraint(m, discharge <= upper_bound(discharge) * (1 - z[b, batt, t]))
+    end
+
     @objective(m, Min,
         (1/net.time_steps_per_hour) * (
             sum(m[:p_gen][b][gen][t] * inputs.offer_prices[gen][t]
                 for b in CPF.generator_busses(net)
                 for gen in keys(m[:p_gen][b])
-                for t in 1:net.Ntimesteps)
-            +
-            # degradation cost
-            sum(m[:p_charge][b][batt][t] * inputs.charging_cost[batt][t]
-                for b in CPF.battery_busses(net)
-                for batt in keys(m[:p_charge][b])
-                for t in 1:net.Ntimesteps) +
-            sum(m[:p_discharge][b][batt][t] * inputs.discharging_cost[batt][t]
-                for b in CPF.battery_busses(net)
-                for batt in keys(m[:p_discharge][b])
                 for t in 1:net.Ntimesteps)
             + sum(m[:p_discharge][b][batt][t] * inputs.ess_offers[batt][t]
                 for b in CPF.battery_busses(net)

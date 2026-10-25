@@ -9,6 +9,40 @@ Run the unit tests from this directory:
 julia --project=. test/runtests.jl
 ```
 
+The experiment base case is `inputs_base::BIMInputs`. Network demand, generator limits,
+and storage limits come from `src/networks/base-single-ess.yaml`; price and cost
+vectors come from `src/inputs.jl`. Use `replace_inputs(inputs_base; b = 60.0)` to
+change the terminal SOC bid without mutating the base case.
+
+Generate the plotting inputs in parallel from this directory:
+
+```sh
+julia --project=. --threads=1 -p 6 run_experiments.jl
+```
+
+Like `run_me.jl`, `run_experiments.jl` runs `run_base()` by default and exposes
+four commented calls for noisy offers and uniform errors, each with or without
+perfect foresight. Uncomment the desired calls to run experiments. The experiment
+functions accept `n_samples` (10,000 by default; use 100 for a quick run).
+The `run_noisy_offer_sweep` and `run_plot_experiments` helpers remain available
+for per-b sweeps and generating all notebook inputs, respectively.
+`-p 6` starts six worker
+processes, and samples are distributed across those workers.
+
+Results are written to `outputs/bim`. Once the selected runs finish, restart the
+Julia kernel and run `notebooks/plot_experiments.ipynb` to load the CSVs and save
+plots in `figures/bim`. Running the whole notebook requires all experiment CSVs;
+individual runs refresh only their corresponding files.
+
+The experiment runners use `build_bim_single_bid` and `build_bim_multi_bid` and
+accept a `network_file_path` keyword. The existing CSV layout supports one battery
+on a copper plate with generators named `thermal` and `renewable`. BIM multi-bid
+excludes degradation costs from its objective and uses binary operating modes to
+prevent simultaneous charging and discharging. Prices come from an LP re-solve
+with those modes fixed at their optimal values. Reported ESS surplus still
+subtracts degradation costs for comparison with the single-bid reference. The old `Inputs` base case remains available
+as `legacy_inputs_base` for `check_duals.jl` and the original model builders.
+
 # Definitions
 - $x_t$ thermal dispatch
 - $c_x$ thermal offers

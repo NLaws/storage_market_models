@@ -22,7 +22,7 @@ function summarize_price_extrema(
 end
 
 """
-    sweep_demand_perturbations(inputs = inputs_base; perturbations, time_steps, ...)
+    sweep_demand_perturbations(inputs = legacy_inputs_base; perturbations, time_steps, ...)
 
 Change demand at one time step at a time, relative to the original inputs.
 The default sweep starts with decreases and covers magnitudes 1e-6 to 1 MW
@@ -37,7 +37,7 @@ only for the original charging bound, to avoid mixing demand and cap effects.
 Optionally write the records to `output_csv`.
 """
 function sweep_demand_perturbations(
-        inputs::Inputs = inputs_base;
+        inputs::Inputs = legacy_inputs_base;
         perturbations = vcat(-10.0 .^ range(-6, 0; length = 25),
             10.0 .^ range(-6, 0; length = 25)),
         time_steps = eachindex(inputs.demand),
@@ -147,7 +147,7 @@ function sweep_demand_perturbations(
 end
 
 """
-    check_duals(inputs = inputs_base; dual_bound = 1.0e4, price_tol = 1.0e-6)
+    check_duals(inputs = legacy_inputs_base; dual_bound = 1.0e4, price_tol = 1.0e-6)
 
 Find each load-balance price's range using the single-bid KKT model.
 `feasibility_tol = 1e-9` controls the LP and MILP feasibility tolerances.
@@ -156,7 +156,7 @@ Endpoint price vectors are individually feasible; their components cannot
 necessarily be combined into a feasible vector.
 """
 function check_duals(
-        inputs::Inputs = inputs_base;
+        inputs::Inputs = legacy_inputs_base;
         dual_bound::Float64 = 1.0e4, 
         price_tol::Float64 = 1.0e-6,
         feasibility_tol::Float64 = 1.0e-9,
@@ -252,7 +252,7 @@ function check_duals(
 end
 
 """
-    sweep_discharge_limits(inputs = inputs_base; reductions, time_steps, ...)
+    sweep_discharge_limits(inputs = legacy_inputs_base; reductions, time_steps, ...)
 
 Cap discharge below its original optimal dispatch at one interval at a time.
 Report every interval's price for each solve to expose intertemporal effects.
@@ -260,7 +260,7 @@ Reductions are in MW and are clipped at zero discharge. These are sensitivities
 of modified LPs, not optimal dual ranges of the original LP.
 """
 function sweep_discharge_limits(
-        inputs::Inputs = inputs_base;
+        inputs::Inputs = legacy_inputs_base;
         reductions = 10.0 .^ range(-6, -1; length = 21),
         time_steps = eachindex(inputs.demand),
         feasibility_tol::Float64 = 1.0e-9,

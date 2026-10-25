@@ -1,6 +1,6 @@
 using Distributed
 
-if nworkers() == 0
+if nprocs() == 1
     n_local_workers = max(Sys.CPU_THREADS - 1, 1)
     addprocs(
         n_local_workers;
@@ -16,18 +16,11 @@ using JuMP
 
 
 function run_base()
-    m = build_single_bid_model(inputs_base)
-    set_silent(m)
+    m, net = build_bim_single_bid(inputs_base; silent = true)
+    print_results(inputs_base, m, net)
 
-    optimize!(m)
-    print_results(inputs_base, m)
-
-
-    m = build_multi_bid_model(inputs_base)
-    set_silent(m)
-
-    optimize!(m)
-    print_results(inputs_base, m)
+    m, net = build_bim_multi_bid(inputs_base; silent = true)
+    print_results(inputs_base, m, net)
 
 end
 

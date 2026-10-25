@@ -12,7 +12,7 @@
         ess_offers = Dict("battery" => [43.1, 50.0, 0.0, 0.0, 49.9, 49.9]),
         net_soc_bid = Dict("battery" => fill(terminal_soc_bid, 6)),
     )
-    m, net = ESSModels.build_copper_plate_single_bid_model(inputs, network_path)
+    m, net = ESSModels.build_bim_single_bid(inputs, network_path)
 
     @test JuMP.termination_status(m) == JuMP.OPTIMAL
 
@@ -98,16 +98,29 @@ end
                 ess_offers = Dict(name => [100.0, 20.0]),
                 net_soc_bid = Dict(name => zeros(2)),
             )
-            m, net = ESSModels.build_copper_plate_multi_bid_model(inputs, network_path)
+            m, net = ESSModels.build_bim_multi_bid(inputs, network_path)
 
             @test termination_status(m) == JuMP.OPTIMAL
             @test isapprox(value.(m[:p_charge]["storage_bus"][name]), [capacity, 0.0], atol = 1e-6)
             @test isapprox(value.(m[:p_discharge]["storage_bus"][name]), [0.0, capacity], atol = 1e-6)
             @test isapprox(value(m[:soc]["storage_bus"][name][net.Ntimesteps]), 0.0, atol = 1e-6)
             @test isapprox(value.(m[:p_gen]["storage_bus"]["thermal"]), [0.0, 100.0 - capacity], atol = 1e-6)
-            # Four-hour intervals: thermal + degradation + discharge offers - charging bids.
-            expected_cost = 4 * (50 * (100 - capacity) + 2 * capacity + 20 * capacity - 10 * capacity)
+            # Four-hour intervals: thermal + discharge offers - charging bids.
+            expected_cost = 4 * (50 * (100 - capacity) + 20 * capacity - 10 * capacity)
             @test isapprox(objective_value(m), expected_cost, atol = 1e-6)
+
+            # Negative offers and high charging bids would reward simultaneous cycling.
+            write(network_path, replace(read(network_path, String),
+                "soc_init: 0.0" => "soc_init: $(2 * capacity)"))
+            inputs.ess_bids[name] = [1000.0, 0.0]
+            inputs.ess_offers[name] = [-1000.0, 20.0]
+            cycling_model, _ = ESSModels.build_bim_multi_bid(inputs, network_path; silent = true)
+            @test termination_status(cycling_model) == JuMP.OPTIMAL
+            charge = value.(cycling_model[:p_charge]["storage_bus"][name])
+            discharge = value.(cycling_model[:p_discharge]["storage_bus"][name])
+            @test charge[1] > 0
+            @test discharge[1] ≈ 0 atol = 1e-6
+            @test all(charge .* discharge .<= 1e-6)
         end
     end
 end
